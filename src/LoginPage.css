@@ -1,0 +1,101 @@
+.login-page {
+  min-height: 100svh;
+  background-color: #121212;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  box-sizing: border-box;
+}
+
+.login-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  max-width: 360px;
+  width: 100%;
+  text-align: center;
+}
+
+/* Brand */
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 48px;
+}
+
+.brand-name {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+  margin: 0;
+  line-height: 1.1;
+}
+
+.brand-tagline {
+  font-size: 15px;
+  color: #b3b3b3;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Button */
+
+.login-actions {
+  width: 100%;
+  margin-bottom: 28px;
+}
+
+.spotify-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 32px;
+  background-color: #1DB954;
+  color: #000000;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border: none;
+  border-radius: 500px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  font-family: inherit;
+}
+
+.spotify-btn:hover {
+  background-color: #1ed760;
+  transform: scale(1.02);
+}
+
+.spotify-btn:active {
+  transform: scale(0.98);
+  background-color: #18a549;
+}
+
+/* Disclaimer */
+
+.login-disclaimer {
+  font-size: 12px;
+  color: #6a6a6a;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 300px;
+}
+
+/* Footer */
+
+.login-footer {
+  position: absolute;
+  bottom: 24px;
+  font-size: 12px;
+  color: #535353;
+}

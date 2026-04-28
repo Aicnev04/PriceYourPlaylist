@@ -1,32 +1,15 @@
-import { useState, useEffect } from 'react'
-import './App.css'
-
-const API = import.meta.env.VITE_API_URL || ''
+import LoginPage from './LoginPage'
+import Callback from './Callback'
+import HomePage from './HomePage'
+import { isTokenValid } from './spotify-auth'
 
 function App() {
-  const [message, setMessage] = useState('');
-  const [time, setTime] = useState(0);
+  const path = window.location.pathname
 
-  useEffect(() => {
-    fetch(`${API}/api/info`).then(res => res.json()).then(data => {
-      setMessage(data.message);
-    });
-  }, []);
+  if (path === '/callback') return <Callback />
+  if (!isTokenValid()) return <LoginPage />
 
-  useEffect(() => {
-    fetch(`${API}/api/time`).then(res => res.json()).then(data => {
-      setTime(data.time);
-    });
-  }, []);
-
-  return (
-    <>
-      <section id="center">
-        <p>{message}</p>
-        <p>The current time is {new Date(time * 1000).toLocaleString()}.</p>
-      </section>
-    </>
-  )
+  return <HomePage />
 }
 
 export default App
