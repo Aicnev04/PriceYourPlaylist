@@ -74,18 +74,17 @@ def get_playlists():
 
     data = spotify_get("/me/playlists", params={"limit": limit, "offset": offset})
 
-    items = [
-        {
-            "id":            pl["id"],
-            "name":          pl["name"],
-            "track_count":   pl["tracks"]["total"],
+    items = []
+    for pl in data.get("items", []):
+        items.append({
+            "id":            pl.get("id"),
+            "name":          pl.get("name"),
+            "track_count":   pl.get("tracks", {}).get("total", 0),
             "public":        pl.get("public"),
             "collaborative": pl.get("collaborative"),
-            "image_url":     pl["images"][0]["url"] if pl.get("images") else None,
-            "owner":         pl["owner"]["display_name"],
-        }
-        for pl in data.get("items", [])
-    ]
+            "image_url":     pl.get("images", [{}])[0].get("url") if pl.get("images") else None,
+            "owner":         pl.get("owner", {}).get("display_name") or pl.get("owner", {}).get("id"),
+        })
 
     return jsonify({
         "total":  data.get("total", 0),
