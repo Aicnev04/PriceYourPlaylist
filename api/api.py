@@ -76,10 +76,12 @@ def get_playlists():
 
     items = []
     for pl in data.get("items", []):
+        # Spotify changed 'tracks' to 'items' in Feb 2026
+        track_info = pl.get("items") or pl.get("tracks") or {}
         items.append({
             "id":            pl.get("id"),
             "name":          pl.get("name"),
-            "track_count":   pl.get("tracks", {}).get("total", 0),
+            "track_count":   track_info.get("total", 0),
             "public":        pl.get("public"),
             "collaborative": pl.get("collaborative"),
             "image_url":     pl.get("images", [{}])[0].get("url") if pl.get("images") else None,
@@ -103,13 +105,13 @@ def get_playlist_tracks(playlist_id: str):
 
     while True:
         data = spotify_get(
-            f"/playlists/{playlist_id}/tracks",
+            f"/playlists/{playlist_id}/items",
             params={
                 "limit":  limit,
                 "offset": offset,
                 "fields": (
                     "total,next,items(added_at,"
-                    "track(id,name,explicit,duration_ms,preview_url,"
+                    "item(id,name,explicit,duration_ms,preview_url,"
                     "artists(name),album(name,release_date)))"
                 ),
             },
@@ -119,7 +121,7 @@ def get_playlist_tracks(playlist_id: str):
             total = data.get("total", 0)
 
         for item in data.get("items", []):
-            track = item.get("track")
+            track = item.get("item")
             if not track:
                 continue   # Spotify can return null tracks (deleted songs)
             all_tracks.append({
