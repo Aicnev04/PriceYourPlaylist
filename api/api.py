@@ -86,6 +86,7 @@ def get_playlists():
             "collaborative": pl.get("collaborative"),
             "image_url":     pl.get("images", [{}])[0].get("url") if pl.get("images") else None,
             "owner":         pl.get("owner", {}).get("display_name") or pl.get("owner", {}).get("id"),
+            "owner_id":      pl.get("owner", {}).get("id"),
         })
 
     return jsonify({
@@ -98,6 +99,18 @@ def get_playlists():
 @app.route("/api/spotify/playlists/<playlist_id>/tracks")
 @require_token
 def get_playlist_tracks(playlist_id: str):
+    # First, get playlist info to check if current user owns it
+    playlist_info = spotify_get(f"/playlists/{playlist_id}", params={"fields": "owner(id)"})
+    owner_id = playlist_info.get("owner", {}).get("id")
+    
+    # Get current user's ID
+    current_user = spotify_get("/me", params={"fields": "id"})
+    current_user_id = current_user.get("id")
+    
+    # Spotify Feb 2026: only return items for user's own playlists
+    if owner_id != current_user_id:
+        abort(403, description="You can only fetch tracks from your own playlists. This playlist is owned by another user.")
+    
     all_tracks = []
     offset = 0
     limit  = 100

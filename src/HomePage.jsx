@@ -36,12 +36,12 @@ function TrackRow({ track, index }) {
   )
 }
 
-function PlaylistCard({ pl, onClick, index }) {
+function PlaylistCard({ pl, onClick, index, isOwnPlaylist }) {
   return (
     <div
       className="home-playlist-card"
       style={{ animationDelay: `${Math.min(index * 40, 800)}ms` }}
-      onClick={() => onClick(pl)}
+      onClick={() => isOwnPlaylist && onClick(pl)}
     >
       {pl.image_url
         ? <img className="home-playlist-card__image" src={pl.image_url} alt={pl.name} />
@@ -49,7 +49,9 @@ function PlaylistCard({ pl, onClick, index }) {
       }
       <div className="home-playlist-card__name">{pl.name}</div>
       <div className="home-playlist-card__meta">{pl.track_count} tracks</div>
-      <div className="home-playlist-card__cta">Analyse</div>
+      <div className={`home-playlist-card__cta${!isOwnPlaylist ? ' home-playlist-card__cta--disabled' : ''}`}>
+        {isOwnPlaylist ? 'Analyse' : 'Not your playlist'}
+      </div>
     </div>
   )
 }
@@ -209,7 +211,13 @@ function HomePage() {
 
           <div className="home-playlist-grid">
             {playlists.map((pl, i) => (
-              <PlaylistCard key={pl.id} pl={pl} index={i} onClick={setSelectedPlaylist} />
+              <PlaylistCard 
+                key={pl.id} 
+                pl={pl} 
+                index={i} 
+                onClick={setSelectedPlaylist} 
+                isOwnPlaylist={profile?.id === pl.owner_id}
+              />
             ))}
           </div>
 

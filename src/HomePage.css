@@ -250,8 +250,17 @@ body {
   transition: opacity 0.15s;
 }
 
+.home-playlist-card__cta--disabled {
+  color: #444;
+  opacity: 0.5;
+}
+
 .home-playlist-card:hover .home-playlist-card__cta {
   opacity: 1;
+}
+
+.home-playlist-card:hover .home-playlist-card__cta--disabled {
+  opacity: 0.5;
 }
 
 .home-detail {
