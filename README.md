@@ -108,3 +108,4 @@ Once all three are running, open the **`https://` URL from the ngrok terminal** 
 | `redirect_uri: Not matching configuration` | The URL in `.env` doesn't exactly match what's saved in your Spotify dashboard |
 | `ERR_NGROK_3004` | Your Vite server isn't running — start `npm run dev` first |
 | Blank page after login | Make sure you restarted `npm run dev` after editing `.env` |
+| Error running npm run api | Ensure the api path under scripts in package.json aligns with your venv path (everyone's is different cause of different systems) |
