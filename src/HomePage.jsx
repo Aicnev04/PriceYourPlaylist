@@ -20,16 +20,37 @@ async function spotifyFetch(path) {
 function TrackRow({ track, index }) {
   const [open, setOpen] = useState(false)
 
+  const formatDuration = (ms) => {
+    if (!ms) return '0:00'
+    const totalSeconds = Math.floor(ms / 1000)
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+
   return (
     <div
       className="home-track-row"
       style={{ animationDelay: `${Math.min(index * 30, 600)}ms` }}
     >
-      <div>
-        <span className="home-track-row__index">{index + 1}</span>
-        <div>
-          <div className="home-track-row__name">{track.name}</div>
-          <div className="home-track-row__artist">{(track.artists || []).join(', ')}</div>
+    <div>
+      <div className="home-track-row__inner">
+        <div className="home-track-row__index">{index + 1}</div>
+          <div>
+            <div className="home-track-row__name">{track.name}</div>
+            <div className="home-track-row__artist">{(track.artists || []).join(', ')}</div>
+          </div>
+
+          <div className="home-track-row__duration">{formatDuration(track.duration_ms)}</div>
+
+          {track.price ? (
+            <div className="home-track-row__price">
+              ${track.price.price} ({track.price.version})
+              <a href={track.price.link} target="_blank" rel="noopener noreferrer">{' '}Buy on Discogs</a>
+              </div>
+            ) : (
+              <div className="home-track-row__price">No vinyl price available</div>
+            )}
         </div>
       </div>
     </div>
@@ -60,16 +81,22 @@ function PlaylistDetail({ playlist, onBack }) {
   const [tracks,   setTracks]   = useState(null)
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState(null)
+  const [totalPrice, setTotalPrice] = useState(0)
 
   useEffect(() => {
     if (!playlist) return
     setLoading(true)
     setTracks(null)
     setError(null)
+    setTotalPrice(0)
 
     spotifyFetch(`/api/spotify/playlists/${playlist.id}/tracks`)
       .then(async data => {
         setTracks(data.tracks)
+        const total = data.tracks.reduce((sum, track) => {
+          return sum + (track.price ? parseFloat(track.price.price) || 0 : 0)
+        }, 0)
+        setTotalPrice(total)
 
         const ids = data.tracks.map(t => t.id).filter(Boolean)
         const batches = []
@@ -108,6 +135,11 @@ function PlaylistDetail({ playlist, onBack }) {
           {tracks.map((track, i) => (
             <TrackRow key={track.id ?? i} track={track} index={i} />
           ))}
+          {tracks.length > 0 && (
+            <div className="home-total-price">
+              Total Price: ${totalPrice.toFixed(2)}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -33,7 +33,6 @@ body {
 
 
 .home-page {
-  max-width: 900px;
   margin: 0 auto;
   padding: 0 24px 80px;
 }
@@ -44,7 +43,7 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 28px 0 32px;
-  border-bottom: 1px solid #111;
+  border-bottom: 1px solid #2c2c2c;
   margin-bottom: 36px;
   animation: fadeUp 0.5s ease both;
 }
@@ -421,6 +420,25 @@ body {
   font-family: 'DM Mono', monospace;
 }
 
+.home-track-row__price {
+  animation: price-fade-in 0.35s ease;
+  font-size: 11px;
+  color: #888;
+  font-family: 'DM Mono', monospace;
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.home-track-row__price a {
+  color: #1db954;
+  text-decoration: none;
+}
+
+.home-track-row__price a:hover {
+  text-decoration: underline;
+}
+
 .home-track-row__explicit {
   font-size: 9px;
   font-family: 'DM Mono', monospace;
@@ -468,4 +486,14 @@ body {
   font-family: 'DM Mono', monospace;
   font-size: 12px;
   color: #f17060;
+}
+
+.home-total-price {
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  color: #e8e8e8;
+  text-align: center;
+  padding: 20px 0;
+  border-top: 1px solid #1a1a1a;
+  margin-top: 20px;
 }
