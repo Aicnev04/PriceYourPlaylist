@@ -20,6 +20,8 @@ const VinylMark = () => (
     ))}
     <circle cx="50" cy="50" r="20" fill="#212121" />
     <circle cx="50" cy="50" r="18" fill="#18a549" />
+    {/* Dark half — two-tone label makes rotation visible */}
+    <path d="M 50 32 A 18 18 0 0 1 50 68 Z" fill="#0d7034" />
     <circle cx="50" cy="50" r="14" fill="none" stroke="#15943f" strokeWidth="0.6" />
     <circle cx="50" cy="50" r="2.5" fill="#0a0a0a" />
   </svg>
@@ -42,7 +44,7 @@ const Turntable = () => (
     <circle cx={RX} cy={RY} r="163" fill="#0d0d0d" stroke="#1c1c1c" strokeWidth="1.5" />
 
     {/* === Spinning vinyl group === */}
-    <g className="vinyl-spin" style={{ transformOrigin: `${RX}px ${RY}px` }}>
+    <g className="vinyl-spin">
       {/* Record body */}
       <circle cx={RX} cy={RY} r="148" fill="#191919" />
       <circle cx={RX} cy={RY} r="148" fill="none" stroke="#2a2a2a" strokeWidth="0.8" />
@@ -55,6 +57,8 @@ const Turntable = () => (
       <circle cx={RX} cy={RY} r="55" fill="#161616" />
       {/* Label */}
       <circle cx={RX} cy={RY} r="50" fill="#18a549" />
+      {/* Dark half — two-tone label makes rotation visible */}
+      <path d={`M ${RX} ${RY - 50} A 50 50 0 0 1 ${RX} ${RY + 50} Z`} fill="#0d7034" />
       <circle cx={RX} cy={RY} r="38" fill="none" stroke="#15943f" strokeWidth="0.9" />
       <circle cx={RX} cy={RY} r="27" fill="none" stroke="#15943f" strokeWidth="0.4" />
       {/* Spindle hole */}

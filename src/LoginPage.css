@@ -65,13 +65,17 @@ body {
 /* Vinyl */
 
 .login-vinyl-sm {
-  animation: spin 28s linear infinite;
+  animation: spin 8s linear infinite;
   flex-shrink: 0;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
 /* The spinning vinyl group inside the turntable SVG */
 .vinyl-spin {
-  animation: spin 1.8s linear infinite;
+  animation: spin 4s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
 .turntable-svg {
