@@ -1,6 +1,7 @@
 import logging
 import os
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps
 from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
@@ -218,6 +219,7 @@ def get_playlist_tracks(playlist_id: str):
     limit  = 100
     total  = None
 
+    # Phase 1: collect all track metadata from Spotify (paginated, sequential)
     while True:
         data = spotify_get(
             f"/playlists/{playlist_id}/items",
@@ -227,7 +229,7 @@ def get_playlist_tracks(playlist_id: str):
                 "fields": (
                     "total,next,items(added_at,"
                     "item(id,name,explicit,duration_ms,preview_url,"
-                    "artists(name),album(name,release_date)))"
+                    "artists(name),album(name,release_date,images)))"
                 ),
             },
         )
@@ -240,29 +242,45 @@ def get_playlist_tracks(playlist_id: str):
             if not track:
                 app.logger.debug("Skipping null track in playlist '%s'", playlist_id)
                 continue
-            track_data = {
+            album        = track.get("album", {})
+            album_images = album.get("images", [])
+            # smallest image is last (64 px); use it for the row thumbnail
+            album_image  = album_images[-1]["url"] if album_images else None
+            all_tracks.append({
                 "id":          track.get("id"),
                 "name":        track.get("name"),
                 "artists":     [a["name"] for a in track.get("artists", [])],
-                "album":       track.get("album", {}).get("name"),
+                "album":       album.get("name"),
+                "album_image": album_image,
                 "duration_ms": track.get("duration_ms"),
-            }
-            artist = track_data["artists"][0] if track_data["artists"] else ""
-            track_title = track_data["name"]
-            app.logger.debug("Fetching Discogs price for '%s' by '%s'", track_title, artist)
-            price = get_discogs_price(artist, track_title, track_data.get("album"))
-            if not price["found"]:
-                app.logger.debug("'%s' not found on Discogs", track_title)
-            elif price["price"] is None:
-                app.logger.debug("'%s' on Discogs but no listings for sale", track_title)
-            else:
-                app.logger.info("Discogs price found for '%s': $%s", track_title, price["price"])
-            track_data["price"] = price
-            all_tracks.append(track_data)
+            })
 
         offset += limit
         if not data.get("next"):
             break
+
+    # Phase 2: fan out all Discogs lookups in parallel
+    def fetch_price(track_data):
+        artist = track_data["artists"][0] if track_data["artists"] else ""
+        app.logger.debug("Fetching Discogs price for '%s' by '%s'", track_data["name"], artist)
+        return track_data, get_discogs_price(artist, track_data["name"], track_data.get("album"))
+
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futures = {executor.submit(fetch_price, t): t for t in all_tracks}
+        priced = {}
+        for future in as_completed(futures):
+            track_data, price = future.result()
+            if not price["found"]:
+                app.logger.debug("'%s' not found on Discogs", track_data["name"])
+            elif price["price"] is None:
+                app.logger.debug("'%s' on Discogs but no listings for sale", track_data["name"])
+            else:
+                app.logger.info("Discogs price found for '%s': $%s", track_data["name"], price["price"])
+            track_data["price"] = price
+            priced[track_data["id"]] = track_data
+
+    # Restore original playlist order
+    all_tracks = [priced[t["id"]] for t in all_tracks if t["id"] in priced]
 
     app.logger.info("Playlist '%s': returning %d tracks", playlist_id, len(all_tracks))
     return jsonify({
