@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps
@@ -82,6 +83,13 @@ def require_token(f):
         return f(*args, **kwargs)
     return decorated
 
+def normalize_title_for_search(title: str) -> str:
+    if not title:
+        return title
+    # Remove parenthesized featured artist text like "(feat. Artist)"
+    return re.sub(r"\s*\((?:feat|featuring|ft|feat|with\.)\s+[^)]*\)", "", title, flags=re.IGNORECASE).strip()
+
+
 def get_discogs_price(artist: str, title: str, album: str = None) -> dict:
     """Return a dict with at minimum {"found": bool}.
 
@@ -90,35 +98,39 @@ def get_discogs_price(artist: str, title: str, album: str = None) -> dict:
     found=True, price=<float>  → on Discogs with a lowest price
     """
     if not DISCOGS_TOKEN:
-        return {"found": False}
+        return {"found": False, "link": get_amazon_link(artist, album, title)}
 
     search_url = "https://api.discogs.com/database/search"
-    query_parts = [p for p in (artist, title, album) if p]
+    normalized_title = normalize_title_for_search(title)
+    query_parts = [p for p in (artist, normalized_title, album) if p]
     search_params = {
         "q": " ".join(query_parts),
         "type": "release",
     }
 
+    amazon_link = get_amazon_link(artist, album, normalized_title)
+
     try:
         search_response = requests.get(search_url, params=search_params, headers=headers, timeout=10)
     except requests.exceptions.RequestException as e:
         app.logger.warning("Discogs search network error for '%s': %s", title, e)
-        return {"found": False}
+        return {"found": False, "link": amazon_link}
 
     if search_response.status_code == 401:
         app.logger.error("Discogs token is invalid or missing (401)")
-        return {"found": False}
+        return {"found": False, "link": amazon_link}
     if search_response.status_code == 429:
         app.logger.warning("Discogs rate limit hit searching '%s'", title)
-        return {"found": False}
+        return {"found": False, "link": amazon_link}
     if not search_response.ok:
         app.logger.warning("Discogs search returned %d for '%s'", search_response.status_code, title)
-        return {"found": False}
+        return {"found": False, "link": amazon_link}
 
     results = [r for r in search_response.json().get("results", []) if r.get("type") == "release"]
 
     if not results:
-        return {"found": False}
+        link = get_amazon_link(artist, album, title)
+        return {"found": False, "link": link}
 
     # Track is on Discogs — now check if any listing has a price
     for result in results[:5]:
@@ -150,6 +162,10 @@ def get_discogs_price(artist: str, title: str, album: str = None) -> dict:
         "price": None,
         "link": f"https://www.discogs.com/release/{first['id']}",
     }
+
+def get_amazon_link(artist: str, album: str, track: str) -> str | None:
+    query = " ".join(p for p in [track, artist, album] if p)
+    return f"https://www.amazon.com/s?k={requests.utils.quote(query)}&i=digital-music"
 
 @app.route("/api/spotify/me")
 @require_token

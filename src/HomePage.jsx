@@ -52,8 +52,8 @@ function TrackRow({ track, index }) {
   }
 
   const price    = track.price
-  const hasPrice = price?.found && price?.price != null
-  const hasLink  = price?.found && price?.link
+  const hasPrice = price?.price != null
+  const hasLink  = Boolean(price?.link)
 
   return (
     <div className="home-track-row" style={{ animationDelay: `${Math.min(index * 30, 600)}ms` }}>
@@ -79,7 +79,7 @@ function TrackRow({ track, index }) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              {hasPrice ? 'Buy' : 'Discogs'}
+              {hasPrice ? 'Buy' : 'Link'}
             </a>
           )}
         </div>
