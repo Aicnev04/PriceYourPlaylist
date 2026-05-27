@@ -31,4 +31,4 @@ env/
 ENV/
 
 #Python files
-__pycache__/
+__pycache__/.env
