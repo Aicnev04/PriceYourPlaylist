@@ -16,72 +16,105 @@ async function spotifyFetch(path) {
   return res.json()
 }
 
+function SkeletonCard() {
+  return (
+    <div className="home-playlist-card home-playlist-card--skeleton">
+      <div className="skeleton skeleton--image" />
+      <div className="skeleton skeleton--title" />
+      <div className="skeleton skeleton--meta" />
+    </div>
+  )
+}
+
+function SkeletonTrackRow() {
+  return (
+    <div className="home-track-row">
+      <div className="home-track-row__inner">
+        <div className="skeleton skeleton--index" />
+        <div className="skeleton skeleton--thumb" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+          <div className="skeleton skeleton--name" />
+          <div className="skeleton skeleton--artist" />
+        </div>
+        <div className="skeleton skeleton--duration" />
+        <div className="skeleton skeleton--price" />
+        <div className="skeleton skeleton--buy" />
+      </div>
+    </div>
+  )
+}
 
 function TrackRow({ track, index }) {
-  const [open, setOpen] = useState(false)
-
   const formatDuration = (ms) => {
     if (!ms) return '0:00'
-    const totalSeconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+    const s = Math.floor(ms / 1000)
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
   }
 
+  const price    = track.price
+  const hasPrice = price?.price != null
+  const hasLink  = Boolean(price?.link)
+
   return (
-    <div
-      className="home-track-row"
-      style={{ animationDelay: `${Math.min(index * 30, 600)}ms` }}
-    >
-    <div>
+    <div className="home-track-row" style={{ animationDelay: `${Math.min(index * 30, 600)}ms` }}>
       <div className="home-track-row__inner">
         <div className="home-track-row__index">{index + 1}</div>
-          <div>
-            <div className="home-track-row__name">{track.name}</div>
-            <div className="home-track-row__artist">{(track.artists || []).join(', ')}</div>
-          </div>
-
-          <div className="home-track-row__duration">{formatDuration(track.duration_ms)}</div>
-
-          {track.price ? (
-            <div className="home-track-row__price">
-              ${track.price.price} ({track.price.version})
-              <a href={track.price.link} target="_blank" rel="noopener noreferrer">{' '}Buy on Discogs</a>
-              </div>
-            ) : (
-              <div className="home-track-row__price">No vinyl price available</div>
-            )}
+        {track.album_image
+          ? <img className="home-track-row__thumb" src={track.album_image} alt="" />
+          : <div className="home-track-row__thumb home-track-row__thumb--placeholder" />
+        }
+        <div style={{ minWidth: 0 }}>
+          <div className="home-track-row__name">{track.name}</div>
+          <div className="home-track-row__artist">{(track.artists || []).join(', ')}</div>
+        </div>
+        <div className="home-track-row__duration">{formatDuration(track.duration_ms)}</div>
+        <div className="home-track-row__price-amount">
+          {hasPrice ? `$${Number(price.price).toFixed(2)}` : ''}
+        </div>
+        <div className="home-track-row__buy">
+          {hasLink && (
+            <a
+              className="home-track-row__buy-btn"
+              href={price.link}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {hasPrice ? 'Buy' : 'Link'}
+            </a>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-function PlaylistCard({ pl, onClick, index, isOwnPlaylist }) {
+function PlaylistCard({ pl, onClick, index }) {
   return (
     <div
       className="home-playlist-card"
       style={{ animationDelay: `${Math.min(index * 40, 800)}ms` }}
-      onClick={() => isOwnPlaylist && onClick(pl)}
+      onClick={() => onClick(pl)}
     >
       {pl.image_url
         ? <img className="home-playlist-card__image" src={pl.image_url} alt={pl.name} />
-        : <div className="home-playlist-card__placeholder"></div>
+        : <div className="home-playlist-card__placeholder">♪</div>
       }
       <div className="home-playlist-card__name">{pl.name}</div>
       <div className="home-playlist-card__meta">{pl.track_count} tracks</div>
-      <div className={`home-playlist-card__cta${!isOwnPlaylist ? ' home-playlist-card__cta--disabled' : ''}`}>
-        {isOwnPlaylist ? 'Analyse' : 'Not your playlist'}
-      </div>
+      <div className="home-playlist-card__cta">Price it →</div>
     </div>
   )
 }
 
 function PlaylistDetail({ playlist, onBack }) {
-  const [tracks,   setTracks]   = useState(null)
-  const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState(null)
-  const [totalPrice, setTotalPrice] = useState(0)
+  const [tracks,      setTracks]      = useState(null)
+  const [loading,     setLoading]     = useState(true)
+  const [error,       setError]       = useState(null)
+  const [totalPrice,  setTotalPrice]  = useState(0)
+  const [pricedCount, setPricedCount] = useState(0)
+  
+  // NEW: State for format filter
+  const [mediaFormat, setMediaFormat] = useState("")
 
   useEffect(() => {
     if (!playlist) return
@@ -89,24 +122,21 @@ function PlaylistDetail({ playlist, onBack }) {
     setTracks(null)
     setError(null)
     setTotalPrice(0)
+    setPricedCount(0)
 
-    spotifyFetch(`/api/spotify/playlists/${playlist.id}/tracks`)
-      .then(async data => {
+    // NEW: Append the format to the query string
+    const formatQuery = mediaFormat ? `?format=${mediaFormat}` : ""
+
+    spotifyFetch(`/api/spotify/playlists/${playlist.id}/tracks${formatQuery}`)
+      .then(data => {
         setTracks(data.tracks)
-        const total = data.tracks.reduce((sum, track) => {
-          return sum + (track.price ? parseFloat(track.price.price) || 0 : 0)
-        }, 0)
-        setTotalPrice(total)
-
-        const ids = data.tracks.map(t => t.id).filter(Boolean)
-        const batches = []
-        for (let i = 0; i < ids.length; i += 100) batches.push(ids.slice(i, i + 100))
+        const priced = data.tracks.filter(t => t.price?.price != null)
+        setPricedCount(priced.length)
+        setTotalPrice(priced.reduce((sum, t) => sum + parseFloat(t.price.price), 0))
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [playlist])
-
-  const hasStats = false
+  }, [playlist, mediaFormat]) // NEW: Added mediaFormat to dependency array
 
   return (
     <div className="home-detail">
@@ -117,30 +147,59 @@ function PlaylistDetail({ playlist, onBack }) {
           ? <img className="home-detail-cover" src={playlist.image_url} alt={playlist.name} />
           : <div className="home-detail-cover--placeholder">♪</div>
         }
-        <div>
+        <div className="home-detail-info">
           <div className="home-detail-title">{playlist.name}</div>
+          
+          {/* NEW: Dropdown UI */}
+          <div className="home-filter-container">
+            <label htmlFor="format-filter" className="home-meta-label">Target Format:</label>
+            <select 
+              id="format-filter" 
+              className="home-format-filter"
+              value={mediaFormat}
+              onChange={(e) => setMediaFormat(e.target.value)}
+            >
+              <option value="">All Formats</option>
+              <option value="Vinyl">Vinyl</option>
+              <option value="CD">CD</option>
+              <option value="Cassette">Cassette</option>
+            </select>
+          </div>
+
           <div className="home-detail-meta">
             by {playlist.owner} · {playlist.track_count} tracks
-            {playlist.public === false &&
-              <span className="home-detail-badge home-detail-badge--private"> PRIVATE</span>}
-            {playlist.collaborative &&
-              <span className="home-detail-badge home-detail-badge--collab"> COLLAB</span>}
           </div>
-        </div>
-      </div>
-
-      {loading && <LoadingPulse label="Loading tracks & audio data…" />}
-      {tracks  && (
-        <div>
-          {tracks.map((track, i) => (
-            <TrackRow key={track.id ?? i} track={track} index={i} />
-          ))}
-          {tracks.length > 0 && (
-            <div className="home-total-price">
-              Total Price: ${totalPrice.toFixed(2)}
+          {!loading && tracks && (
+            <div className="home-stats-row">
+              <div className="home-stat">
+                <span className="home-stat__value">{tracks.length}</span>
+                <span className="home-stat__label">Tracks</span>
+              </div>
+              <div className="home-stat">
+                <span className="home-stat__value">{pricedCount}</span>
+                <span className="home-stat__label">Priced</span>
+              </div>
+              <div className="home-stat">
+                <span className="home-stat__value home-stat__value--highlight">
+                  ${totalPrice.toFixed(2)}
+                </span>
+                <span className="home-stat__label">Total Value</span>
+              </div>
             </div>
           )}
         </div>
+      </div>
+
+      {error && <div className="home-error">{error}</div>}
+      {loading && Array.from({ length: 8 }).map((_, i) => <SkeletonTrackRow key={i} />)}
+
+      {tracks && (
+        <>
+          <div className="home-track-hint"># · Track · Duration · Price</div>
+          {tracks.map((track, i) => (
+            <TrackRow key={track.id ?? i} track={track} index={i} />
+          ))}
+        </>
       )}
     </div>
   )
@@ -162,6 +221,8 @@ function HomePage() {
   const [profileLoading,   setProfileLoading]   = useState(true)
   const [playlistsLoading, setPlaylistsLoading] = useState(true)
   const [error,            setError]            = useState(null)
+  const [query,            setQuery]            = useState('')
+  const [showSaved,        setShowSaved]        = useState(false)
 
   useEffect(() => {
     spotifyFetch('/api/spotify/me')
@@ -173,7 +234,6 @@ function HomePage() {
   useEffect(() => {
     const PAGE = 50
     let cancelled = false
-
     async function fetchAll() {
       let offset = 0, total = Infinity
       while (offset < total) {
@@ -186,11 +246,9 @@ function HomePage() {
       }
       setPlaylistsLoading(false)
     }
-
     fetchAll().catch(e => {
       if (!cancelled) { setError(e.message); setPlaylistsLoading(false) }
     })
-
     return () => { cancelled = true }
   }, [])
 
@@ -199,9 +257,14 @@ function HomePage() {
     window.location.href = '/'
   }
 
+  const lq            = query.toLowerCase()
+  const myPlaylists    = playlists.filter(pl => !profile || pl.owner_id === profile.id)
+  const savedPlaylists = profile ? playlists.filter(pl => pl.owner_id !== profile.id) : []
+  const filteredMine   = myPlaylists.filter(pl => pl.name.toLowerCase().includes(lq))
+  const filteredSaved  = savedPlaylists.filter(pl => pl.name.toLowerCase().includes(lq))
+
   return (
     <div className="home-page">
-
       <header className="home-header">
         <div className="home-logo">Price Your Playlist</div>
         {profile && (
@@ -214,47 +277,82 @@ function HomePage() {
           </div>
         )}
       </header>
-
+      {error && <div className="home-error">{error}</div>}
       {profileLoading && <LoadingPulse label="Fetching profile…" />}
-      {profile && (
+      {profile && !selectedPlaylist && (
         <section className="home-profile">
-          {profile.images?.[0]?.url
-            ? <img className="home-profile-avatar" src={profile.images[0].url} alt={profile.display_name} />
-            : <div className="home-profile-avatar--placeholder">{profile.display_name?.[0]}</div>
-          }
-          <div>
-            <div className="home-name">{profile.display_name}</div>
+          <div className="home-name">{profile.display_name}</div>
+          <div className="home-profile-meta">
+            <span>
+              <span className="home-meta-label">Followers </span>
+              <span className="home-meta-value">{(profile.followers ?? 0).toLocaleString()}</span>
+            </span>
+            {!playlistsLoading && (
+              <span>
+                <span className="home-meta-label">Playlists </span>
+                <span className="home-meta-value">{myPlaylists.length}</span>
+              </span>
+            )}
+            {profile.product === 'premium' && (
+              <span className="home-meta-value home-meta-value--premium">Premium</span>
+            )}
           </div>
         </section>
       )}
-
       {!selectedPlaylist ? (
         <section>
-          <div className="home-section-heading">
-            Your Playlists
-            {!playlistsLoading && (
-              <span className="home-section-count">{playlists.length} total</span>
-            )}
+          <div className="home-section-top">
+            <div className="home-section-heading">
+              Your Playlists
+              {!playlistsLoading && (
+                <span className="home-section-count">{myPlaylists.length} total</span>
+              )}
+            </div>
+            <input
+              className="home-search"
+              type="search"
+              placeholder="Filter playlists…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
           </div>
-
-          {playlistsLoading && playlists.length === 0 && (
-            <LoadingPulse label="Loading playlists…" />
+          {playlistsLoading && playlists.length === 0 ? (
+            <div className="home-playlist-grid">
+              {Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+          ) : (
+            <div className="home-playlist-grid">
+              {filteredMine.map((pl, i) => (
+                <PlaylistCard key={pl.id} pl={pl} index={i} onClick={setSelectedPlaylist} />
+              ))}
+            </div>
           )}
-
-          <div className="home-playlist-grid">
-            {playlists.map((pl, i) => (
-              <PlaylistCard 
-                key={pl.id} 
-                pl={pl} 
-                index={i} 
-                onClick={setSelectedPlaylist} 
-                isOwnPlaylist={profile?.id === pl.owner_id}
-              />
-            ))}
-          </div>
-
           {playlistsLoading && playlists.length > 0 && (
             <LoadingPulse label="Loading more…" />
+          )}
+          {!playlistsLoading && filteredSaved.length > 0 && (
+            <div className="home-saved-section">
+              <button
+                className="home-saved-toggle"
+                onClick={() => setShowSaved(s => !s)}
+              >
+                {showSaved ? '▾' : '▸'} Also saved ({filteredSaved.length})
+              </button>
+              {showSaved && (
+                <div className="home-playlist-grid">
+                  {filteredSaved.map((pl) => (
+                    <div key={pl.id} className="home-playlist-card home-playlist-card--saved">
+                      {pl.image_url
+                        ? <img className="home-playlist-card__image" src={pl.image_url} alt={pl.name} />
+                        : <div className="home-playlist-card__placeholder">♪</div>
+                      }
+                      <div className="home-playlist-card__name">{pl.name}</div>
+                      <div className="home-playlist-card__meta">{pl.track_count} tracks · {pl.owner}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </section>
       ) : (
@@ -263,7 +361,6 @@ function HomePage() {
           onBack={() => setSelectedPlaylist(null)}
         />
       )}
-
     </div>
   )
 }
