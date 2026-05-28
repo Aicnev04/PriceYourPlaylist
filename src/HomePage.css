@@ -601,66 +601,14 @@ body {
   font-family: 'DM Mono', monospace;
   font-size: 12px;
   color: #f17060;
-  margin-bottom: 20px;
 }
 
-
-/* --- NEW: Format Filter Dropdown Styles --- */
-.home-filter-container {
-  display: flex;
-  align-items: center;
-  margin-top: 16px;
-  gap: 10px;
-}
-
-.home-format-filter {
-  background-color: #0a0a0a;
-  color: #d0d0d0;
+.home-total-price {
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  padding: 6px 12px;
-  border: 1px solid #222;
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.home-format-filter:hover,
-.home-format-filter:focus {
-  border-color: #18a549;
-  color: #18a549;
-}
-
-.home-format-filter option {
-  background-color: #0a0a0a;
-  color: #d0d0d0;
-}
-
-
-/* Mobile */
-
-@media (max-width: 600px) {
-  .home-track-row__inner {
-    grid-template-columns: 20px 36px 1fr auto auto;
-  }
-
-  .home-track-row__duration { display: none; }
-
-  .home-search {
-    width: 130px;
-    font-size: 11px;
-  }
-
-  .home-detail-cover,
-  .home-detail-cover--placeholder {
-    width: 88px;
-    height: 88px;
-    font-size: 28px;
-  }
-
-  .home-detail-title { font-size: 26px; }
-  .home-name         { font-size: 32px; }
+  font-size: 14px;
+  color: #e8e8e8;
+  text-align: center;
+  padding: 20px 0;
+  border-top: 1px solid #1a1a1a;
+  margin-top: 20px;
 }
