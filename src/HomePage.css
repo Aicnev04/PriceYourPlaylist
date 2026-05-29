@@ -593,6 +593,9 @@ body {
 
 /* Error */
 
+
+/* Error */
+
 .home-error {
   background: #1a0a0a;
   border: 1px solid #3a1a1a;
@@ -601,14 +604,31 @@ body {
   font-family: 'DM Mono', monospace;
   font-size: 12px;
   color: #f17060;
+  margin-bottom: 20px;
 }
 
-.home-total-price {
-  font-family: 'DM Mono', monospace;
-  font-size: 14px;
-  color: #e8e8e8;
-  text-align: center;
-  padding: 20px 0;
-  border-top: 1px solid #1a1a1a;
-  margin-top: 20px;
+
+/* Mobile */
+
+@media (max-width: 600px) {
+  .home-track-row__inner {
+    grid-template-columns: 20px 36px 1fr auto auto;
+  }
+
+  .home-track-row__duration { display: none; }
+
+  .home-search {
+    width: 130px;
+    font-size: 11px;
+  }
+
+  .home-detail-cover,
+  .home-detail-cover--placeholder {
+    width: 88px;
+    height: 88px;
+    font-size: 28px;
+  }
+
+  .home-detail-title { font-size: 26px; }
+  .home-name         { font-size: 32px; }
 }
