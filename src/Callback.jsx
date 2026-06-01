@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { exchangeCodeForToken } from './spotify-auth'
 import './Callback.css'
 
 function Callback() {
   const [error, setError] = useState(null)
+  const exchanged = useRef(false)
 
   useEffect(() => {
+    if (exchanged.current) return
+    exchanged.current = true
+
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
     const denied = params.get('error')
