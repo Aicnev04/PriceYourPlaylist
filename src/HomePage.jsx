@@ -91,9 +91,8 @@ function TrackRow({ track, index }) {
   )
 }
 
-// Task 3: album group component shown when 2+ tracks share an album
 function AlbumGroup({ albumName, tracks, startIndex }) {
-  const [buyMode, setBuyMode] = useState('individual') // 'album' | 'individual'
+  const [buyMode, setBuyMode] = useState('individual')
   const albumPrice = tracks[0]?.album_price
   const hasAlbumPrice = albumPrice?.price != null
   const hasAlbumLink  = Boolean(albumPrice?.link)
@@ -101,9 +100,8 @@ function AlbumGroup({ albumName, tracks, startIndex }) {
 
   return (
     <div className="home-album-group">
-      {/* header uses the same 6-col grid as .home-track-row__inner so columns align */}
       <div className="home-album-group__header">
-        <div /> {/* index col spacer */}
+        <div />
         {tracks[0]?.album_image
           ? <img className="home-track-row__thumb" src={tracks[0].album_image} alt={albumName} />
           : <div className="home-track-row__thumb home-track-row__thumb--placeholder" />
@@ -112,7 +110,6 @@ function AlbumGroup({ albumName, tracks, startIndex }) {
           <div className="home-album-group__name">{albumName}</div>
           <div className="home-album-group__artist">{(tracks[0]?.artists || []).join(', ')}</div>
         </div>
-        {/* actions span the last 3 auto columns (duration + price + buy) */}
         <div className="home-album-group__actions">
           <div className="home-album-toggle">
             <button
@@ -193,7 +190,6 @@ function PlaylistDetail({ playlist, onBack }) {
   const [totalPrice,  setTotalPrice]  = useState(0)
   const [pricedCount, setPricedCount] = useState(0)
   
-  // NEW: State for format filter
   const [mediaFormat, setMediaFormat] = useState("")
 
   useEffect(() => {
@@ -204,7 +200,6 @@ function PlaylistDetail({ playlist, onBack }) {
     setTotalPrice(0)
     setPricedCount(0)
 
-    // NEW: Append the format to the query string
     const formatQuery = mediaFormat ? `?format=${mediaFormat}` : ""
 
     spotifyFetch(`/api/spotify/playlists/${playlist.id}/tracks${formatQuery}`)
@@ -216,7 +211,7 @@ function PlaylistDetail({ playlist, onBack }) {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [playlist, mediaFormat]) // NEW: Added mediaFormat to dependency array
+  }, [playlist, mediaFormat])
 
   return (
     <div className="home-detail">
@@ -273,7 +268,6 @@ function PlaylistDetail({ playlist, onBack }) {
       {loading && Array.from({ length: 8 }).map((_, i) => <SkeletonTrackRow key={i} />)}
 
       {tracks && (() => {
-        // Group consecutive tracks from the same album when that album has 2+ tracks
         const albumCounts = tracks.reduce((acc, t) => {
           if (t.album) acc[t.album] = (acc[t.album] || 0) + 1
           return acc
@@ -299,7 +293,7 @@ function PlaylistDetail({ playlist, onBack }) {
               )
               i += group.length
             } else {
-              i++ // already rendered in the group above, skip
+              i++
             }
           } else {
             rows.push(<TrackRow key={track.id ?? i} track={track} index={i} />)

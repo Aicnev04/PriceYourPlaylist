@@ -9,17 +9,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
 
-# Initialize Flask app
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)s  %(message)s")
 
-# Configure CORS with frontend URL from environment or default to localhost
 CORS(app, origins=[os.environ.get("FRONTEND_URL", "http://localhost:5173")])
 
-# Spotify API base URL
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 
-# Discogs API configuration
 DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
 if not DISCOGS_TOKEN:
     app.logger.warning("DISCOGS_TOKEN not set — Discogs pricing will be skipped")
@@ -29,14 +25,12 @@ headers = {
 }
 
 def get_spotify_token() -> str | None:
-    """Extract the Spotify OAuth access token from the incoming request."""
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         return auth_header[len("Bearer "):]
     return None
 
 def spotify_get(path: str, params: dict = None) -> dict:
-    """Perform a GET against the Spotify Web API and return parsed JSON."""
     token = get_spotify_token()
     if not token:
         abort(401, description="Missing Spotify access token.")
@@ -62,7 +56,6 @@ def spotify_get(path: str, params: dict = None) -> dict:
     return response.json()
 
 def require_token(f):
-    """Decorator ensuring the incoming request contains a Spotify token."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not get_spotify_token():
@@ -79,10 +72,8 @@ def get_amazon_link(artist: str, album: str, track: str) -> str | None:
     query = " ".join(p for p in [track, artist, album] if p)
     return f"https://www.amazon.com/s?k={requests.utils.quote(query)}&i=digital-music"
 
-# FIXED: Removed the redundant get_discogs_price function. Using the cached one only.
 @lru_cache(maxsize=500)
 def get_discogs_price(artist: str, title: str, album: str = None, media_format: str = None) -> dict | None:
-    """Query the Discogs database for likely release matches and return a price."""
     search_url = "https://api.discogs.com/database/search"
     normalized_title = normalize_title_for_search(title)
     query_parts = [p for p in (artist, normalized_title, album) if p]
@@ -155,10 +146,8 @@ def get_discogs_price(artist: str, title: str, album: str = None, media_format: 
 
 @lru_cache(maxsize=200)
 def get_discogs_album_price(artist: str, album: str, media_format: str = None) -> dict | None:
-    """Find the album's Discogs master release, then price its cheapest pressing."""
     amazon_link = get_amazon_link(artist, album, "")
 
-    # Step 1: find the master release (the album concept, not a specific pressing)
     try:
         search_response = requests.get(
             "https://api.discogs.com/database/search",
@@ -187,7 +176,6 @@ def get_discogs_album_price(artist: str, album: str, media_format: str = None) -
     master_id = master["id"]
     master_link = f"https://www.discogs.com/master/{master_id}"
 
-    # Step 2: fetch versions of this master, optionally filtered by format
     time.sleep(1)
     versions_params = {"per_page": 10, "page": 1, "sort": "price", "sort_order": "asc"}
     if media_format:
@@ -209,7 +197,6 @@ def get_discogs_album_price(artist: str, album: str, media_format: str = None) -
     if not versions:
         return {"found": True, "price": None, "link": master_link}
 
-    # Step 3: walk versions until we find one with a marketplace price
     for version in versions[:5]:
         release_id = version.get("id")
         if not release_id:
@@ -302,7 +289,6 @@ def get_playlist_tracks(playlist_id: str):
             track = item.get("item")
             if not track: continue
             
-            # FIXED: Define album variables before using them
             album = track.get("album", {})
             album_images = album.get("images", [])
             album_image = album_images[0].get("url") if album_images else None
@@ -319,7 +305,6 @@ def get_playlist_tracks(playlist_id: str):
         offset += limit
         if not data.get("next"): break
 
-    # Task 1: detect albums with 2+ tracks in this playlist
     album_track_counts = Counter(
         t["album"] for t in all_tracks if t.get("album")
     )
@@ -329,7 +314,6 @@ def get_playlist_tracks(playlist_id: str):
         artist = track_data["artists"][0] if track_data["artists"] else ""
         return track_data, get_discogs_price(artist, track_data["name"], track_data.get("album"), requested_format)
 
-    # Task 2: fetch individual track prices and album-level prices in parallel
     def fetch_album_price(album: str, artist: str):
         return album, get_discogs_album_price(artist, album, requested_format)
 
