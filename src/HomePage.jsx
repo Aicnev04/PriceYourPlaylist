@@ -44,16 +44,28 @@ function SkeletonTrackRow() {
   )
 }
 
-function TrackRow({ track, index }) {
-  const formatDuration = (ms) => {
-    if (!ms) return '0:00'
-    const s = Math.floor(ms / 1000)
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-  }
+function formatDuration(ms) {
+  if (!ms) return '0:00'
+  const s = Math.floor(ms / 1000)
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
 
-  const price    = track.price
-  const hasPrice = price?.price != null
-  const hasLink  = Boolean(price?.link)
+function BuyButton({ price, label }) {
+  if (!price?.link) return null
+  return (
+    <a
+      className="home-track-row__buy-btn"
+      href={price.link}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {label ?? (price.price != null ? 'Buy' : 'Link')}
+    </a>
+  )
+}
+
+function TrackRow({ track, index }) {
+  const price = track.price
 
   return (
     <div className="home-track-row" style={{ animationDelay: `${Math.min(index * 30, 600)}ms` }}>
@@ -69,21 +81,86 @@ function TrackRow({ track, index }) {
         </div>
         <div className="home-track-row__duration">{formatDuration(track.duration_ms)}</div>
         <div className="home-track-row__price-amount">
-          {hasPrice ? `$${Number(price.price).toFixed(2)}` : ''}
+          {price?.price != null ? `$${Number(price.price).toFixed(2)}` : ''}
         </div>
         <div className="home-track-row__buy">
-          {hasLink && (
-            <a
-              className="home-track-row__buy-btn"
-              href={price.link}
-              target="_blank"
-              rel="noopener noreferrer"
+          <BuyButton price={price} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Task 3: album group component shown when 2+ tracks share an album
+function AlbumGroup({ albumName, tracks, startIndex }) {
+  const [buyMode, setBuyMode] = useState('individual') // 'album' | 'individual'
+  const albumPrice = tracks[0]?.album_price
+  const hasAlbumPrice = albumPrice?.price != null
+  const hasAlbumLink  = Boolean(albumPrice?.link)
+  const totalIndividual = tracks.reduce((sum, t) => sum + (t.price?.price ?? 0), 0)
+
+  return (
+    <div className="home-album-group">
+      {/* header uses the same 6-col grid as .home-track-row__inner so columns align */}
+      <div className="home-album-group__header">
+        <div /> {/* index col spacer */}
+        {tracks[0]?.album_image
+          ? <img className="home-track-row__thumb" src={tracks[0].album_image} alt={albumName} />
+          : <div className="home-track-row__thumb home-track-row__thumb--placeholder" />
+        }
+        <div style={{ minWidth: 0 }}>
+          <div className="home-album-group__name">{albumName}</div>
+          <div className="home-album-group__artist">{(tracks[0]?.artists || []).join(', ')}</div>
+        </div>
+        {/* actions span the last 3 auto columns (duration + price + buy) */}
+        <div className="home-album-group__actions">
+          <div className="home-album-toggle">
+            <button
+              className={`home-album-toggle__btn${buyMode === 'individual' ? ' home-album-toggle__btn--active' : ''}`}
+              onClick={() => setBuyMode('individual')}
             >
-              {hasPrice ? 'Buy' : 'Link'}
-            </a>
+              Individual{totalIndividual > 0 && ` $${totalIndividual.toFixed(2)}`}
+            </button>
+            <button
+              className={`home-album-toggle__btn${buyMode === 'album' ? ' home-album-toggle__btn--active' : ''}`}
+              onClick={() => setBuyMode('album')}
+              disabled={!hasAlbumLink}
+            >
+              Album{hasAlbumPrice && ` $${Number(albumPrice.price).toFixed(2)}`}
+            </button>
+          </div>
+          {buyMode === 'album' && hasAlbumLink && (
+            <BuyButton price={albumPrice} label={hasAlbumPrice ? 'Buy Album' : 'View Album'} />
           )}
         </div>
       </div>
+
+      {tracks.map((track, i) => (
+        <div
+          key={track.id ?? i}
+          className="home-track-row home-track-row--grouped"
+          style={{ animationDelay: `${Math.min((startIndex + i) * 30, 600)}ms` }}
+        >
+          <div className="home-track-row__inner">
+            <div className="home-track-row__index">{startIndex + i + 1}</div>
+            {track.album_image
+              ? <img className="home-track-row__thumb" src={track.album_image} alt="" />
+              : <div className="home-track-row__thumb home-track-row__thumb--placeholder" />
+            }
+            <div style={{ minWidth: 0 }}>
+              <div className="home-track-row__name">{track.name}</div>
+              <div className="home-track-row__artist">{(track.artists || []).join(', ')}</div>
+            </div>
+            <div className="home-track-row__duration">{formatDuration(track.duration_ms)}</div>
+            <div className="home-track-row__price-amount">
+              {track.price?.price != null ? `$${Number(track.price.price).toFixed(2)}` : ''}
+            </div>
+            <div className="home-track-row__buy">
+              {buyMode === 'individual' && <BuyButton price={track.price} />}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -150,20 +227,19 @@ function PlaylistDetail({ playlist, onBack }) {
         <div className="home-detail-info">
           <div className="home-detail-title">{playlist.name}</div>
           
-          {/* NEW: Dropdown UI */}
           <div className="home-filter-container">
-            <label htmlFor="format-filter" className="home-meta-label">Target Format:</label>
-            <select 
-              id="format-filter" 
-              className="home-format-filter"
-              value={mediaFormat}
-              onChange={(e) => setMediaFormat(e.target.value)}
-            >
-              <option value="">All Formats</option>
-              <option value="Vinyl">Vinyl</option>
-              <option value="CD">CD</option>
-              <option value="Cassette">Cassette</option>
-            </select>
+            <span className="home-meta-label">Format</span>
+            <div className="home-format-toggle">
+              {[['', 'All'], ['Vinyl', 'Vinyl'], ['CD', 'CD'], ['Cassette', 'Cassette']].map(([val, label]) => (
+                <button
+                  key={val}
+                  className={`home-format-btn${mediaFormat === val ? ' home-format-btn--active' : ''}`}
+                  onClick={() => setMediaFormat(val)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="home-detail-meta">
@@ -193,14 +269,43 @@ function PlaylistDetail({ playlist, onBack }) {
       {error && <div className="home-error">{error}</div>}
       {loading && Array.from({ length: 8 }).map((_, i) => <SkeletonTrackRow key={i} />)}
 
-      {tracks && (
-        <>
-          <div className="home-track-hint"># · Track · Duration · Price</div>
-          {tracks.map((track, i) => (
-            <TrackRow key={track.id ?? i} track={track} index={i} />
-          ))}
-        </>
-      )}
+      {tracks && (() => {
+        // Group consecutive tracks from the same album when that album has 2+ tracks
+        const albumCounts = tracks.reduce((acc, t) => {
+          if (t.album) acc[t.album] = (acc[t.album] || 0) + 1
+          return acc
+        }, {})
+
+        const rows = []
+        let i = 0
+        while (i < tracks.length) {
+          const track = tracks[i]
+          const album = track.album
+          if (album && albumCounts[album] >= 2 && track.album_price !== undefined) {
+            // collect all tracks in this playlist with this album name
+            const group = tracks.filter(t => t.album === album)
+            rows.push(
+              <AlbumGroup
+                key={`album-${album}`}
+                albumName={album}
+                tracks={group}
+                startIndex={i}
+              />
+            )
+            // skip past all tracks in this album
+            i += group.length
+          } else {
+            rows.push(<TrackRow key={track.id ?? i} track={track} index={i} />)
+            i++
+          }
+        }
+        return (
+          <>
+            <div className="home-track-hint"># · Track · Duration · Price</div>
+            {rows}
+          </>
+        )
+      })()}
     </div>
   )
 }

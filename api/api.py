@@ -3,8 +3,9 @@ import re
 import requests
 import time
 import logging
+from collections import Counter
 from functools import wraps, lru_cache
-from concurrent.futures import ThreadPoolExecutor, as_completed # FIXED: Added missing import
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
 
@@ -152,6 +153,70 @@ def get_discogs_price(artist: str, title: str, album: str = None, media_format: 
     }
 
 
+@lru_cache(maxsize=200)
+def get_discogs_album_price(artist: str, album: str, media_format: str = None) -> dict | None:
+    """Query Discogs for a full album release and return its lowest marketplace price."""
+    search_url = "https://api.discogs.com/database/search"
+    search_params = {
+        "q": f"{artist} {album}",
+        "type": "release",
+    }
+    if media_format:
+        search_params["format"] = media_format
+
+    amazon_link = get_amazon_link(artist, album, "")
+
+    try:
+        search_response = requests.get(search_url, params=search_params, headers=headers, timeout=10)
+    except requests.exceptions.RequestException as e:
+        app.logger.warning("Discogs album search network error for '%s - %s': %s", artist, album, e)
+        return {"found": False, "link": amazon_link}
+
+    if search_response.status_code == 401:
+        app.logger.error("Discogs token is invalid or missing (401)")
+        return {"found": False, "link": amazon_link}
+    if search_response.status_code == 429:
+        app.logger.warning("Discogs rate limit hit searching album '%s'", album)
+        return {"found": False, "link": amazon_link}
+    if not search_response.ok:
+        app.logger.warning("Discogs album search returned %d for '%s'", search_response.status_code, album)
+        return {"found": False, "link": amazon_link}
+
+    results = [r for r in search_response.json().get("results", []) if r.get("type") == "release"]
+    if not results:
+        return {"found": False, "link": amazon_link}
+
+    for result in results[:2]:
+        release_id = result["id"]
+        time.sleep(1)
+        try:
+            price_response = requests.get(
+                f"https://api.discogs.com/releases/{release_id}",
+                headers=headers,
+                timeout=10,
+            )
+            price_response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            app.logger.warning("Discogs release fetch error for album id %s: %s", release_id, e)
+            continue
+
+        lowest_price = price_response.json().get("lowest_price")
+        if lowest_price:
+            return {
+                "found": True,
+                "version": result["title"],
+                "price": lowest_price,
+                "link": f"https://www.discogs.com/sell/release/{release_id}",
+            }
+
+    first = results[0]
+    return {
+        "found": True,
+        "price": None,
+        "link": f"https://www.discogs.com/release/{first['id']}",
+    }
+
+
 @app.route("/api/spotify/me")
 @require_token
 def get_profile():
@@ -233,17 +298,47 @@ def get_playlist_tracks(playlist_id: str):
         offset += limit
         if not data.get("next"): break
 
+    # Task 1: detect albums with 2+ tracks in this playlist
+    album_track_counts = Counter(
+        t["album"] for t in all_tracks if t.get("album")
+    )
+    multi_track_albums = {album for album, count in album_track_counts.items() if count >= 2}
+
     def fetch_price(track_data):
         artist = track_data["artists"][0] if track_data["artists"] else ""
         return track_data, get_discogs_price(artist, track_data["name"], track_data.get("album"), requested_format)
 
+    # Task 2: fetch individual track prices and album-level prices in parallel
+    def fetch_album_price(album: str, artist: str):
+        return album, get_discogs_album_price(artist, album, requested_format)
+
     with ThreadPoolExecutor(max_workers=20) as executor:
-        futures = {executor.submit(fetch_price, t): t for t in all_tracks}
+        track_futures = {executor.submit(fetch_price, t): t for t in all_tracks}
+
+        album_artist_map = {}
+        for t in all_tracks:
+            album = t.get("album")
+            if album and album in multi_track_albums and album not in album_artist_map:
+                album_artist_map[album] = t["artists"][0] if t["artists"] else ""
+        album_futures = {
+            executor.submit(fetch_album_price, album, artist): album
+            for album, artist in album_artist_map.items()
+        }
+
         priced = {}
-        for future in as_completed(futures):
+        for future in as_completed(track_futures):
             track_data, price = future.result()
             track_data["price"] = price
             priced[track_data["id"]] = track_data
+
+        album_prices = {}
+        for future in as_completed(album_futures):
+            album_name, album_price = future.result()
+            album_prices[album_name] = album_price
+
+    for track_data in priced.values():
+        album = track_data.get("album")
+        track_data["album_price"] = album_prices.get(album) if album in multi_track_albums else None
 
     all_tracks = [priced[t["id"]] for t in all_tracks if t["id"] in priced]
     return jsonify({"playlist_id": playlist_id, "tracks": all_tracks})
