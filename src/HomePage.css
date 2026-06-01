@@ -763,6 +763,26 @@ body {
   cursor: not-allowed;
 }
 
+/* Collapsible track list inside the album box */
+
+.home-album-tracks {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 250ms ease, opacity 250ms ease;
+  opacity: 1;
+  overflow: hidden;
+}
+
+.home-album-tracks--collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.home-album-tracks__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Grouped track rows inside the album box */
 
 .home-track-row--grouped {

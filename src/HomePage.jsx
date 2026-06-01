@@ -135,32 +135,35 @@ function AlbumGroup({ albumName, tracks, startIndex }) {
         </div>
       </div>
 
-      {tracks.map((track, i) => (
-        <div
-          key={track.id ?? i}
-          className="home-track-row home-track-row--grouped"
-          style={{ animationDelay: `${Math.min((startIndex + i) * 30, 600)}ms` }}
-        >
-          <div className="home-track-row__inner">
-            <div className="home-track-row__index">{startIndex + i + 1}</div>
-            {track.album_image
-              ? <img className="home-track-row__thumb" src={track.album_image} alt="" />
-              : <div className="home-track-row__thumb home-track-row__thumb--placeholder" />
-            }
-            <div style={{ minWidth: 0 }}>
-              <div className="home-track-row__name">{track.name}</div>
-              <div className="home-track-row__artist">{(track.artists || []).join(', ')}</div>
-            </div>
-            <div className="home-track-row__duration">{formatDuration(track.duration_ms)}</div>
-            <div className="home-track-row__price-amount">
-              {track.price?.price != null ? `$${Number(track.price.price).toFixed(2)}` : ''}
-            </div>
-            <div className="home-track-row__buy">
-              {buyMode === 'individual' && <BuyButton price={track.price} />}
+      <div className={`home-album-tracks${buyMode === 'album' ? ' home-album-tracks--collapsed' : ''}`}>
+        <div className="home-album-tracks__inner">
+        {tracks.map((track, i) => (
+          <div
+            key={track.id ?? i}
+            className="home-track-row home-track-row--grouped"
+          >
+            <div className="home-track-row__inner">
+              <div className="home-track-row__index">{startIndex + i + 1}</div>
+              {track.album_image
+                ? <img className="home-track-row__thumb" src={track.album_image} alt="" />
+                : <div className="home-track-row__thumb home-track-row__thumb--placeholder" />
+              }
+              <div style={{ minWidth: 0 }}>
+                <div className="home-track-row__name">{track.name}</div>
+                <div className="home-track-row__artist">{(track.artists || []).join(', ')}</div>
+              </div>
+              <div className="home-track-row__duration">{formatDuration(track.duration_ms)}</div>
+              <div className="home-track-row__price-amount">
+                {track.price?.price != null ? `$${Number(track.price.price).toFixed(2)}` : ''}
+              </div>
+              <div className="home-track-row__buy">
+                <BuyButton price={track.price} />
+              </div>
             </div>
           </div>
+        ))}
         </div>
-      ))}
+      </div>
     </div>
   )
 }
@@ -277,23 +280,27 @@ function PlaylistDetail({ playlist, onBack }) {
         }, {})
 
         const rows = []
+        const renderedAlbums = new Set()
         let i = 0
         while (i < tracks.length) {
           const track = tracks[i]
           const album = track.album
           if (album && albumCounts[album] >= 2 && track.album_price !== undefined) {
-            // collect all tracks in this playlist with this album name
-            const group = tracks.filter(t => t.album === album)
-            rows.push(
-              <AlbumGroup
-                key={`album-${album}`}
-                albumName={album}
-                tracks={group}
-                startIndex={i}
-              />
-            )
-            // skip past all tracks in this album
-            i += group.length
+            if (!renderedAlbums.has(album)) {
+              renderedAlbums.add(album)
+              const group = tracks.filter(t => t.album === album)
+              rows.push(
+                <AlbumGroup
+                  key={`album-${album}`}
+                  albumName={album}
+                  tracks={group}
+                  startIndex={i}
+                />
+              )
+              i += group.length
+            } else {
+              i++ // already rendered in the group above, skip
+            }
           } else {
             rows.push(<TrackRow key={track.id ?? i} track={track} index={i} />)
             i++

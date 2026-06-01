@@ -155,39 +155,65 @@ def get_discogs_price(artist: str, title: str, album: str = None, media_format: 
 
 @lru_cache(maxsize=200)
 def get_discogs_album_price(artist: str, album: str, media_format: str = None) -> dict | None:
-    """Query Discogs for a full album release and return its lowest marketplace price."""
-    search_url = "https://api.discogs.com/database/search"
-    search_params = {
-        "q": f"{artist} {album}",
-        "type": "release",
-    }
-    if media_format:
-        search_params["format"] = media_format
-
+    """Find the album's Discogs master release, then price its cheapest pressing."""
     amazon_link = get_amazon_link(artist, album, "")
 
+    # Step 1: find the master release (the album concept, not a specific pressing)
     try:
-        search_response = requests.get(search_url, params=search_params, headers=headers, timeout=10)
+        search_response = requests.get(
+            "https://api.discogs.com/database/search",
+            params={"q": f"{artist} {album}", "type": "master"},
+            headers=headers,
+            timeout=10,
+        )
     except requests.exceptions.RequestException as e:
-        app.logger.warning("Discogs album search network error for '%s - %s': %s", artist, album, e)
+        app.logger.warning("Discogs master search network error for '%s - %s': %s", artist, album, e)
         return {"found": False, "link": amazon_link}
 
     if search_response.status_code == 401:
-        app.logger.error("Discogs token is invalid or missing (401)")
+        app.logger.error("Discogs token invalid (401)")
         return {"found": False, "link": amazon_link}
     if search_response.status_code == 429:
-        app.logger.warning("Discogs rate limit hit searching album '%s'", album)
+        app.logger.warning("Discogs rate limit hit searching master '%s'", album)
         return {"found": False, "link": amazon_link}
     if not search_response.ok:
-        app.logger.warning("Discogs album search returned %d for '%s'", search_response.status_code, album)
         return {"found": False, "link": amazon_link}
 
-    results = [r for r in search_response.json().get("results", []) if r.get("type") == "release"]
-    if not results:
+    masters = search_response.json().get("results", [])
+    if not masters:
         return {"found": False, "link": amazon_link}
 
-    for result in results[:2]:
-        release_id = result["id"]
+    master = masters[0]
+    master_id = master["id"]
+    master_link = f"https://www.discogs.com/master/{master_id}"
+
+    # Step 2: fetch versions of this master, optionally filtered by format
+    time.sleep(1)
+    versions_params = {"per_page": 10, "page": 1, "sort": "price", "sort_order": "asc"}
+    if media_format:
+        versions_params["format"] = media_format
+
+    try:
+        versions_response = requests.get(
+            f"https://api.discogs.com/masters/{master_id}/versions",
+            headers=headers,
+            params=versions_params,
+            timeout=10,
+        )
+        versions_response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        app.logger.warning("Discogs versions fetch error for master %s: %s", master_id, e)
+        return {"found": True, "price": None, "link": master_link}
+
+    versions = versions_response.json().get("versions", [])
+    if not versions:
+        return {"found": True, "price": None, "link": master_link}
+
+    # Step 3: walk versions until we find one with a marketplace price
+    for version in versions[:5]:
+        release_id = version.get("id")
+        if not release_id:
+            continue
         time.sleep(1)
         try:
             price_response = requests.get(
@@ -197,24 +223,19 @@ def get_discogs_album_price(artist: str, album: str, media_format: str = None) -
             )
             price_response.raise_for_status()
         except requests.exceptions.RequestException as e:
-            app.logger.warning("Discogs release fetch error for album id %s: %s", release_id, e)
+            app.logger.warning("Discogs release fetch error for version %s: %s", release_id, e)
             continue
 
         lowest_price = price_response.json().get("lowest_price")
         if lowest_price:
             return {
                 "found": True,
-                "version": result["title"],
                 "price": lowest_price,
                 "link": f"https://www.discogs.com/sell/release/{release_id}",
+                "master_link": master_link,
             }
 
-    first = results[0]
-    return {
-        "found": True,
-        "price": None,
-        "link": f"https://www.discogs.com/release/{first['id']}",
-    }
+    return {"found": True, "price": None, "link": master_link}
 
 
 @app.route("/api/spotify/me")
