@@ -348,5 +348,27 @@ def get_playlist_tracks(playlist_id: str):
     all_tracks = [priced[t["id"]] for t in all_tracks if t["id"] in priced]
     return jsonify({"playlist_id": playlist_id, "tracks": all_tracks})
 
+@app.route("/api/spotify/search")
+@require_token
+def search_tracks():
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({"error": "Missing query parameter 'q'"}), 400
+    limit = min(int(request.args.get("limit", 10)), 20)
+    data = spotify_get("/search", params={"q": q, "type": "track", "limit": limit})
+    tracks = []
+    for item in data.get("tracks", {}).get("items", []):
+        album = item.get("album", {})
+        images = album.get("images", [])
+        tracks.append({
+            "id":          item.get("id"),
+            "name":        item.get("name"),
+            "artists":     [a["name"] for a in item.get("artists", [])],
+            "album":        album.get("name"),
+            "album_image": images[0].get("url") if images else None,
+            "duration_ms": item.get("duration_ms"),
+        })
+    return jsonify({"tracks": tracks})
+
 if __name__ == "__main__":
     app.run(debug=os.environ.get("FLASK_DEBUG", "true").lower() == "true")

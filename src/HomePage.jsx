@@ -320,6 +320,158 @@ function LoadingPulse({ label = 'Loading…' }) {
   )
 }
 
+function SongResultRow({ track, onClick, index }) {
+  return (
+    <div
+      className="home-song-result"
+      style={{ animationDelay: `${Math.min(index * 40, 600)}ms` }}
+      onClick={() => onClick(track)}
+    >
+      {track.album_image
+        ? <img className="home-song-result__thumb" src={track.album_image} alt="" />
+        : <div className="home-song-result__thumb home-song-result__thumb--placeholder">♪</div>
+      }
+      <div className="home-song-result__info">
+        <div className="home-song-result__name">{track.name}</div>
+        <div className="home-song-result__artist">{(track.artists || []).join(', ')}</div>
+        {track.album && <div className="home-song-result__album">{track.album}</div>}
+      </div>
+      <div className="home-song-result__right">
+        <span className="home-song-result__duration">{formatDuration(track.duration_ms)}</span>
+        <span className="home-song-result__cta">Price it →</span>
+      </div>
+    </div>
+  )
+}
+
+function SkeletonSongResult() {
+  return (
+    <div className="home-song-result home-song-result--skeleton">
+      <div className="skeleton home-song-result__thumb" />
+      <div className="home-song-result__info">
+        <div className="skeleton skeleton--name" style={{ marginBottom: 6 }} />
+        <div className="skeleton skeleton--artist" style={{ marginBottom: 4 }} />
+        <div className="skeleton" style={{ height: 10, width: '25%' }} />
+      </div>
+      <div className="skeleton skeleton--duration" />
+      <div className="skeleton skeleton--buy" />
+    </div>
+  )
+}
+
+function SongDetail({ track, onBack }) {
+  const [mediaFormat, setMediaFormat] = useState('')
+
+  return (
+    <div className="home-detail">
+      <button className="home-back-btn" onClick={onBack}>← Back to results</button>
+
+      <div className="home-detail-header">
+        {track.album_image
+          ? <img className="home-detail-cover" src={track.album_image} alt={track.album} />
+          : <div className="home-detail-cover--placeholder">♪</div>
+        }
+        <div className="home-detail-info">
+          <div className="home-detail-title">{track.name}</div>
+          <div className="home-detail-meta">
+            {(track.artists || []).join(', ')}
+            {track.album && ` · ${track.album}`}
+            {track.duration_ms && ` · ${formatDuration(track.duration_ms)}`}
+          </div>
+
+          <div className="home-filter-container">
+            <span className="home-meta-label">Format</span>
+            <div className="home-format-toggle">
+              {[['', 'All'], ['Vinyl', 'Vinyl'], ['CD', 'CD'], ['Cassette', 'Cassette']].map(([val, label]) => (
+                <button
+                  key={val}
+                  className={`home-format-btn${mediaFormat === val ? ' home-format-btn--active' : ''}`}
+                  onClick={() => setMediaFormat(val)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="home-song-price-placeholder">
+        <div className="home-meta-label" style={{ marginBottom: 10 }}>Pricing</div>
+        <div className="home-song-price-coming-soon">
+          Backend pricing coming soon
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SongSearch() {
+  const [query,    setQuery]    = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [results,  setResults]  = useState(null)
+  const [selected, setSelected] = useState(null)
+  const [error,    setError]    = useState(null)
+
+  function handleSearch(e) {
+    e.preventDefault()
+    if (!query.trim()) return
+    setLoading(true)
+    setResults(null)
+    setSelected(null)
+    setError(null)
+    spotifyFetch(`/api/spotify/search?q=${encodeURIComponent(query.trim())}&limit=10`)
+      .then(data => setResults(data.tracks))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }
+
+  if (selected) {
+    return <SongDetail track={selected} onBack={() => setSelected(null)} />
+  }
+
+  return (
+    <div className="home-song-search">
+      <form className="home-song-search-bar" onSubmit={handleSearch}>
+        <input
+          className="home-song-search-input"
+          type="search"
+          placeholder="Song title or artist…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          autoFocus
+        />
+        <button className="home-song-search-btn" type="submit" disabled={loading || !query.trim()}>
+          Search
+        </button>
+      </form>
+
+      {error && <div className="home-error">{error}</div>}
+
+      {results === null && !loading && !error && (
+        <div className="home-song-search-idle">
+          Search for any song to see its price on vinyl, CD, or cassette.
+        </div>
+      )}
+
+      {loading && Array.from({ length: 6 }).map((_, i) => <SkeletonSongResult key={i} />)}
+
+      {results && results.length === 0 && !loading && (
+        <div className="home-song-search-idle">No results found — try a different search.</div>
+      )}
+
+      {results && results.length > 0 && (
+        <>
+          <div className="home-track-hint">{results.length} result{results.length !== 1 ? 's' : ''}</div>
+          {results.map((track, i) => (
+            <SongResultRow key={track.id ?? i} track={track} index={i} onClick={setSelected} />
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
 function HomePage() {
   const [profile,          setProfile]          = useState(null)
   const [playlists,        setPlaylists]        = useState([])
@@ -329,6 +481,7 @@ function HomePage() {
   const [error,            setError]            = useState(null)
   const [query,            setQuery]            = useState('')
   const [showSaved,        setShowSaved]        = useState(false)
+  const [view,             setView]             = useState('playlists')
 
   useEffect(() => {
     spotifyFetch('/api/spotify/me')
@@ -363,6 +516,11 @@ function HomePage() {
     window.location.href = '/'
   }
 
+  function switchView(v) {
+    setView(v)
+    setSelectedPlaylist(null)
+  }
+
   const lq            = query.toLowerCase()
   const myPlaylists    = playlists.filter(pl => !profile || pl.owner_id === profile.id)
   const savedPlaylists = profile ? playlists.filter(pl => pl.owner_id !== profile.id) : []
@@ -385,7 +543,23 @@ function HomePage() {
       </header>
       {error && <div className="home-error">{error}</div>}
       {profileLoading && <LoadingPulse label="Fetching profile…" />}
-      {profile && !selectedPlaylist && (
+
+      <div className="home-view-tabs">
+        <button
+          className={`home-view-tab${view === 'playlists' ? ' home-view-tab--active' : ''}`}
+          onClick={() => switchView('playlists')}
+        >
+          Playlists
+        </button>
+        <button
+          className={`home-view-tab${view === 'song-search' ? ' home-view-tab--active' : ''}`}
+          onClick={() => switchView('song-search')}
+        >
+          Song Search
+        </button>
+      </div>
+
+      {profile && !selectedPlaylist && view === 'playlists' && (
         <section className="home-profile">
           <div className="home-name">{profile.display_name}</div>
           <div className="home-profile-meta">
@@ -405,7 +579,9 @@ function HomePage() {
           </div>
         </section>
       )}
-      {!selectedPlaylist ? (
+      {view === 'song-search' && !selectedPlaylist && <SongSearch />}
+
+      {view === 'playlists' && !selectedPlaylist ? (
         <section>
           <div className="home-section-top">
             <div className="home-section-heading">
@@ -461,12 +637,12 @@ function HomePage() {
             </div>
           )}
         </section>
-      ) : (
+      ) : view === 'playlists' && selectedPlaylist ? (
         <PlaylistDetail
           playlist={selectedPlaylist}
           onBack={() => setSelectedPlaylist(null)}
         />
-      )}
+      ) : null}
     </div>
   )
 }
