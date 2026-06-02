@@ -695,12 +695,34 @@ body {
   padding-right: 10px;
 }
 
+.home-album-collapse {
+  background: none;
+  border: none;
+  color: #1db954;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: transform 200ms ease;
+  transform: rotate(0deg);
+}
+
+.home-album-collapse--collapsed {
+  transform: rotate(-90deg);
+}
+
 .home-album-group__actions {
   grid-column: 4 / -1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.home-album-group__price {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1db954;
 }
 
 .home-album-group__name {
