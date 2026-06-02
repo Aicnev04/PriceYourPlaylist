@@ -92,16 +92,19 @@ function TrackRow({ track, index }) {
 }
 
 function AlbumGroup({ albumName, tracks, startIndex }) {
-  const [buyMode, setBuyMode] = useState('individual')
+  const [collapsed, setCollapsed] = useState(false)
   const albumPrice = tracks[0]?.album_price
   const hasAlbumPrice = albumPrice?.price != null
   const hasAlbumLink  = Boolean(albumPrice?.link)
-  const totalIndividual = tracks.reduce((sum, t) => sum + (t.price?.price ?? 0), 0)
 
   return (
     <div className="home-album-group">
       <div className="home-album-group__header">
-        <div />
+        <button
+          className={`home-album-collapse${collapsed ? ' home-album-collapse--collapsed' : ''}`}
+          onClick={() => setCollapsed(c => !c)}
+          aria-label={collapsed ? 'Expand' : 'Collapse'}
+        >▾</button>
         {tracks[0]?.album_image
           ? <img className="home-track-row__thumb" src={tracks[0].album_image} alt={albumName} />
           : <div className="home-track-row__thumb home-track-row__thumb--placeholder" />
@@ -111,28 +114,16 @@ function AlbumGroup({ albumName, tracks, startIndex }) {
           <div className="home-album-group__artist">{(tracks[0]?.artists || []).join(', ')}</div>
         </div>
         <div className="home-album-group__actions">
-          <div className="home-album-toggle">
-            <button
-              className={`home-album-toggle__btn${buyMode === 'individual' ? ' home-album-toggle__btn--active' : ''}`}
-              onClick={() => setBuyMode('individual')}
-            >
-              Individual{totalIndividual > 0 && ` $${totalIndividual.toFixed(2)}`}
-            </button>
-            <button
-              className={`home-album-toggle__btn${buyMode === 'album' ? ' home-album-toggle__btn--active' : ''}`}
-              onClick={() => setBuyMode('album')}
-              disabled={!hasAlbumLink}
-            >
-              Album{hasAlbumPrice && ` $${Number(albumPrice.price).toFixed(2)}`}
-            </button>
-          </div>
-          {buyMode === 'album' && hasAlbumLink && (
-            <BuyButton price={albumPrice} label={hasAlbumPrice ? 'Buy Album' : 'View Album'} />
+          {hasAlbumPrice && (
+            <span className="home-album-group__price">${Number(albumPrice.price).toFixed(2)}</span>
+          )}
+          {hasAlbumLink && (
+            <BuyButton price={albumPrice} label={hasAlbumPrice ? 'Buy' : 'Link'} />
           )}
         </div>
       </div>
 
-      <div className={`home-album-tracks${buyMode === 'album' ? ' home-album-tracks--collapsed' : ''}`}>
+      <div className={`home-album-tracks${collapsed ? ' home-album-tracks--collapsed' : ''}`}>
         <div className="home-album-tracks__inner">
         {tracks.map((track, i) => (
           <div
@@ -150,12 +141,6 @@ function AlbumGroup({ albumName, tracks, startIndex }) {
                 <div className="home-track-row__artist">{(track.artists || []).join(', ')}</div>
               </div>
               <div className="home-track-row__duration">{formatDuration(track.duration_ms)}</div>
-              <div className="home-track-row__price-amount">
-                {track.price?.price != null ? `$${Number(track.price.price).toFixed(2)}` : ''}
-              </div>
-              <div className="home-track-row__buy">
-                <BuyButton price={track.price} />
-              </div>
             </div>
           </div>
         ))}
@@ -205,22 +190,26 @@ function PlaylistDetail({ playlist, onBack }) {
     spotifyFetch(`/api/spotify/playlists/${playlist.id}/tracks${formatQuery}`)
       .then(data => {
         setTracks(data.tracks)
-        const priced = data.tracks.filter(t => t.price?.price != null)
-        setPricedCount(priced.length)
 
-        //Sum up prices but don't sum if it's from an album thats already been counted
-        const uniqueAlbumPrices = new Set()
+        // Album tracks: count & price once per album
+        const seenAlbums = new Set()
         let total = 0
-        priced.forEach(t => {
-          if (t.album && t.album_price !== undefined) {
-            if (!uniqueAlbumPrices.has(t.album)) {
-              uniqueAlbumPrices.add(t.album)
-              total += parseFloat(t.price.price)
+        let count = 0
+        for (const t of data.tracks) {
+          if (t.album_price != null) {
+            if (!seenAlbums.has(t.album)) {
+              seenAlbums.add(t.album)
+              if (t.album_price.price != null) {
+                total += parseFloat(t.album_price.price)
+                count++
+              }
             }
           } else if (t.price?.price != null) {
             total += parseFloat(t.price.price)
+            count++
           }
-        })
+        }
+        setPricedCount(count)
         setTotalPrice(total)
       })
       .catch(e => setError(e.message))

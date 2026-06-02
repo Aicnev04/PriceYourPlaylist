@@ -317,14 +317,16 @@ def get_playlist_tracks(playlist_id: str):
     def fetch_album_price(album: str, artist: str):
         return album, get_discogs_album_price(artist, album, requested_format)
 
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        track_futures = {executor.submit(fetch_price, t): t for t in all_tracks}
+    solo_tracks = [t for t in all_tracks if t.get("album") not in multi_track_albums]
 
-        album_artist_map = {}
-        for t in all_tracks:
-            album = t.get("album")
-            if album and album in multi_track_albums and album not in album_artist_map:
-                album_artist_map[album] = t["artists"][0] if t["artists"] else ""
+    album_artist_map = {}
+    for t in all_tracks:
+        album = t.get("album")
+        if album and album in multi_track_albums and album not in album_artist_map:
+            album_artist_map[album] = t["artists"][0] if t["artists"] else ""
+
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        track_futures = {executor.submit(fetch_price, t): t for t in solo_tracks}
         album_futures = {
             executor.submit(fetch_album_price, album, artist): album
             for album, artist in album_artist_map.items()
@@ -340,6 +342,11 @@ def get_playlist_tracks(playlist_id: str):
         for future in as_completed(album_futures):
             album_name, album_price = future.result()
             album_prices[album_name] = album_price
+
+    for t in all_tracks:
+        if t["id"] not in priced:
+            t["price"] = None
+            priced[t["id"]] = t
 
     for track_data in priced.values():
         album = track_data.get("album")
