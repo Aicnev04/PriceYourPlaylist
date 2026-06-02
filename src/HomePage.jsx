@@ -207,7 +207,21 @@ function PlaylistDetail({ playlist, onBack }) {
         setTracks(data.tracks)
         const priced = data.tracks.filter(t => t.price?.price != null)
         setPricedCount(priced.length)
-        setTotalPrice(priced.reduce((sum, t) => sum + parseFloat(t.price.price), 0))
+
+        //Sum up prices but don't sum if it's from an album thats already been counted
+        const uniqueAlbumPrices = new Set()
+        let total = 0
+        priced.forEach(t => {
+          if (t.album && t.album_price !== undefined) {
+            if (!uniqueAlbumPrices.has(t.album)) {
+              uniqueAlbumPrices.add(t.album)
+              total += parseFloat(t.price.price)
+            }
+          } else if (t.price?.price != null) {
+            total += parseFloat(t.price.price)
+          }
+        })
+        setTotalPrice(total)
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
