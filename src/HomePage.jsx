@@ -352,14 +352,14 @@ function PlaylistDetail({ playlist, onBack, trackCache }) {
               renderedAlbums.add(album)
               const group = tracks.filter(t => t.album === album)
               rows.push(
-                <AlbumGroup key={`album-${album}`} albumName={album} tracks={group} startIndex={i} />
+                <AlbumGroup key={`album-${album}-${i}`} albumName={album} tracks={group} startIndex={i} />
               )
               i += group.length
             } else {
               i++
             }
           } else {
-            rows.push(<TrackRow key={track.id ?? i} track={track} index={i} />)
+            rows.push(<TrackRow key={`${track.id}-${i}`} track={track} index={i} />)
             i++
           }
         }
