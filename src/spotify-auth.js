@@ -26,7 +26,7 @@ export async function redirectToSpotify() {
   const codeVerifier = generateRandomString(64)
   const codeChallenge = base64encode(await sha256(codeVerifier))
 
-  localStorage.setItem('spotify_code_verifier', codeVerifier)
+  sessionStorage.setItem('spotify_code_verifier', codeVerifier)
 
   const params = new URLSearchParams({
     response_type: 'code',
@@ -40,13 +40,15 @@ export async function redirectToSpotify() {
   window.location.href = `https://accounts.spotify.com/authorize?${params}`
 }
 
-export async function exchangeCodeForToken(code) {
-  const codeVerifier = localStorage.getItem('spotify_code_verifier')
+export async function exchangeCodeForToken(code, signal) {
+  const codeVerifier = sessionStorage.getItem('spotify_code_verifier')
+
 
   const response = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
+      signal, // adding signal for more detail
       grant_type: 'authorization_code',
       code,
       redirect_uri: REDIRECT_URI,
@@ -61,7 +63,7 @@ export async function exchangeCodeForToken(code) {
   localStorage.setItem('spotify_access_token', data.access_token)
   localStorage.setItem('spotify_refresh_token', data.refresh_token)
   localStorage.setItem('spotify_token_expiry', Date.now() + data.expires_in * 1000)
-  localStorage.removeItem('spotify_code_verifier')
+  sessionStorage.removeItem('spotify_code_verifier')
   return data
 }
 

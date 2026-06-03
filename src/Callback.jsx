@@ -23,9 +23,15 @@ function Callback() {
       return
     }
 
-    exchangeCodeForToken(code)
-      .then(() => { window.location.href = '/' })
-      .catch(() => setError('Something went wrong. Please try again.'))
+    exchangeCodeForToken(code, controller.signal)
+      .then(() => { window.location.replace('/') })
+      .catch((err) => {
+        if (err.name === 'AbortError') return
+        console.error('Token exchange failed:', err)
+        setError('Something went wrong. Please try again.')
+      })
+
+    return () => controller.abort()
   }, [])
 
   return (
