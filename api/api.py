@@ -4,6 +4,7 @@ import requests
 import time
 import logging
 from collections import Counter
+import threading
 from functools import wraps, lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, jsonify, request, abort
@@ -23,6 +24,20 @@ headers = {
     "Authorization": f"Discogs token={DISCOGS_TOKEN}",
     "User-Agent": "PriceYourPlaylist/1.0"
 }
+
+discogs_lock = threading.Lock()
+discogs_last_call = 0.0
+
+# limiting discogs api calls
+def discogs_rate_limited_get(url, **kwargs):
+    global discogs_last_call
+    with discogs_lock:
+        now = time.time()
+        wait = 1.0 - (now - discogs_last_call)
+        if wait > 0:
+            time.sleep(wait)
+        discogs_last_call = time.time()
+    return requests.get(url, **kwargs)
 
 def get_spotify_token() -> str | None:
     auth_header = request.headers.get("Authorization", "")
@@ -89,7 +104,7 @@ def get_discogs_price(artist: str, title: str, album: str = None, media_format: 
     amazon_link = get_amazon_link(artist, album, normalized_title)
 
     try:
-        search_response = requests.get(search_url, params=search_params, headers=headers, timeout=10)
+        search_response = discogs_rate_limited_get(search_url, params=search_params, headers=headers, timeout=10)
     except requests.exceptions.RequestException as e:
         app.logger.warning("Discogs search network error for '%s': %s", title, e)
         return {"found": False, "link": amazon_link}
@@ -113,11 +128,21 @@ def get_discogs_price(artist: str, title: str, album: str = None, media_format: 
         if result.get('type') != 'release':
             continue
             
+        # use price from search result if available, skip the extra API call
+        lowest_price = result.get('lowest_price')
+        if lowest_price:
+            return {
+                "found": True,
+                "version": result["title"],
+                "price": lowest_price,
+                "link": f"https://www.discogs.com/sell/release/{result['id']}",
+            }
+        
         release_id = result['id']
-        time.sleep(1) 
+        # time.sleep(1) 
         
         try:
-            price_response = requests.get(
+            price_response = discogs_rate_limited_get(
                 f"https://api.discogs.com/releases/{release_id}",
                 headers=headers,
                 timeout=10,

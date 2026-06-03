@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef} from 'react'
 import { getAccessToken, logout } from './spotify-auth'
 import './HomePage.css'
 import AlbumSearch from './AlbumSearch'
@@ -169,7 +169,10 @@ function PlaylistCard({ pl, onClick, index }) {
   )
 }
 
-function PlaylistDetail({ playlist, onBack }) {
+// Shows all tracks in a playlist with their Discogs prices
+// Re-fetches whenever the user switches the format filter (Vinyl, CD, etc.)
+function PlaylistDetail({ playlist, onBack, trackCache }) {
+  const [progress,    setProgress]    = useState(0)
   const [tracks,      setTracks]      = useState(null)
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState(null)
@@ -180,12 +183,42 @@ function PlaylistDetail({ playlist, onBack }) {
 
   useEffect(() => {
     if (!playlist) return
+
+    const cacheKey = `${playlist.id}-${mediaFormat}`
+
+    if (trackCache.current[cacheKey]) {
+      console.log('cache hit for', cacheKey)
+      const cached = trackCache.current[cacheKey]
+      setTracks(cached.tracks)
+      setPricedCount(cached.pricedCount)
+      setTotalPrice(cached.totalPrice)
+      setLoading(false)
+      return
+    }
+
+
     setLoading(true)
     setTracks(null)
     setError(null)
     setTotalPrice(0)
     setPricedCount(0)
 
+    setProgress(0)
+
+    const trackCount = playlist.track_count || 20
+    const intervalMs = Math.max(200, Math.min(600, trackCount * 10))
+
+    const progressInterval = setInterval(() => {
+      setProgress(p => {
+        if (p >= 85) { clearInterval(progressInterval); return 85 }
+        // slows down exponentially as it approaches 85
+        const remaining = 85 - p
+        const increment = remaining * 0.08
+        return p + increment
+      })
+    }, intervalMs)
+
+    // Add format to query string if one is selected
     const formatQuery = mediaFormat ? `?format=${mediaFormat}` : ""
 
     spotifyFetch(`/api/spotify/playlists/${playlist.id}/tracks${formatQuery}`)
@@ -269,7 +302,25 @@ function PlaylistDetail({ playlist, onBack }) {
       </div>
 
       {error && <div className="home-error">{error}</div>}
-      {loading && Array.from({ length: 8 }).map((_, i) => <SkeletonTrackRow key={i} />)}
+
+      {loading && (
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px', opacity: 0.6 }}>
+            <span>Fetching prices…</span>
+            <span>{Math.round(progress)}%</span>
+          </div>
+          <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%',
+              width: `${progress}%`,
+              background: 'var(--color-primary, #1db954)',
+              borderRadius: '2px',
+              transition: 'width 0.4s ease',
+            }} />
+          </div>
+          {Array.from({ length: 8 }).map((_, i) => <SkeletonTrackRow key={i} />)}
+        </div>
+      )}
 
       {tracks && (() => {
         const albumCounts = tracks.reduce((acc, t) => {
@@ -288,19 +339,14 @@ function PlaylistDetail({ playlist, onBack }) {
               renderedAlbums.add(album)
               const group = tracks.filter(t => t.album === album)
               rows.push(
-                <AlbumGroup
-                  key={`album-${album}`}
-                  albumName={album}
-                  tracks={group}
-                  startIndex={i}
-                />
+                <AlbumGroup key={`album-${album}-${i}`} albumName={album} tracks={group} startIndex={i} />
               )
               i += group.length
             } else {
               i++
             }
           } else {
-            rows.push(<TrackRow key={track.id ?? i} track={track} index={i} />)
+            rows.push(<TrackRow key={`${track.id}-${i}`} track={track} index={i} />)
             i++
           }
         }
@@ -325,6 +371,7 @@ function LoadingPulse({ label = 'Loading…' }) {
 }
 
 function HomePage() {
+  const trackCache = useRef({}) // locally cache recent discogs searches
   const [profile,          setProfile]          = useState(null)
   const [playlists,        setPlaylists]        = useState([])
   const [selectedPlaylist, setSelectedPlaylist] = useState(null)
@@ -472,6 +519,7 @@ function HomePage() {
         <PlaylistDetail
           playlist={selectedPlaylist}
           onBack={() => setSelectedPlaylist(null)}
+          trackCache = {trackCache}
         />
       )}
     </div>

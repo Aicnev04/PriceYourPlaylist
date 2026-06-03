@@ -32,3 +32,11 @@ ENV/
 
 #Python files
 __pycache__/.env
+__pycache__/
+*.pyc
+
+# Vite
+.vite/
+dist/
+dist-ssr/
+*.local
