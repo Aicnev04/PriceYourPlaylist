@@ -136,6 +136,16 @@ def get_discogs_price(artist: str, title: str, album: str = None, media_format: 
         if result.get('type') != 'release':
             continue
             
+        # use price from search result if available, skip the extra API call
+        lowest_price = result.get('lowest_price')
+        if lowest_price:
+            return {
+                "found": True,
+                "version": result["title"],
+                "price": lowest_price,
+                "link": f"https://www.discogs.com/sell/release/{result['id']}",
+            }
+        
         release_id = result['id']
         # time.sleep(1) 
         
