@@ -355,5 +355,34 @@ def get_playlist_tracks(playlist_id: str):
     all_tracks = [priced[t["id"]] for t in all_tracks if t["id"] in priced]
     return jsonify({"playlist_id": playlist_id, "tracks": all_tracks})
 
+@app.route("/api/discogs/search")
+def discogs_search():
+    """Search Discogs for an album by artist and title, optionally filtered by format.
+    
+    Query params:
+      artist  — artist name (required)
+      album   — album title (required)
+      format  — media format: Vinyl, CD, Cassette (optional)
+    
+    Returns the lowest price found on Discogs, plus a buy link.
+    Falls back to an Amazon search link if nothing is found.
+    """
+    artist = request.args.get("artist", "").strip()
+    album  = request.args.get("album",  "").strip()
+    fmt    = request.args.get("format", None)
+
+    if not artist or not album:
+        return jsonify({"error": "artist and album are required"}), 400
+
+    app.logger.debug("GET /api/discogs/search  artist=%s album=%s format=%s", artist, album, fmt)
+
+    # Reuse the existing cached Discogs price function
+    result = get_discogs_price(artist, album, album, fmt)
+
+    if result is None:
+        return jsonify({"found": False})
+
+    return jsonify(result)
+
 if __name__ == "__main__":
     app.run(debug=os.environ.get("FLASK_DEBUG", "true").lower() == "true")

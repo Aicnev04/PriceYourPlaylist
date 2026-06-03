@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getAccessToken, logout } from './spotify-auth'
 import './HomePage.css'
+import AlbumSearch from './AlbumSearch'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -408,6 +409,9 @@ function HomePage() {
           </div>
         </section>
       )}
+      
+      <AlbumSearch />
+
       {!selectedPlaylist ? (
         <section>
           <div className="home-section-top">
