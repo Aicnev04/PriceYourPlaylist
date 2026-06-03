@@ -3,6 +3,7 @@ import re
 import requests
 import time
 import logging
+import threading
 from functools import wraps, lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed # FIXED: Added missing import
 from flask import Flask, jsonify, request, abort
@@ -26,6 +27,20 @@ headers = {
     "Authorization": f"Discogs token={DISCOGS_TOKEN}",
     "User-Agent": "PriceYourPlaylist/1.0"
 }
+
+discogs_lock = threading.Lock()
+discogs_last_call = 0.0
+
+# limiting discogs api calls
+def discogs_rate_limited_get(url, **kwargs):
+    global discogs_last_call
+    with discogs_lock:
+        now = time.time()
+        wait = 1.0 - (now - discogs_last_call)
+        if wait > 0:
+            time.sleep(wait)
+        discogs_last_call = time.time()
+    return requests.get(url, **kwargs)
 
 def get_spotify_token() -> str | None:
     """Extract the Spotify OAuth access token from the incoming request."""
@@ -97,7 +112,7 @@ def get_discogs_price(artist: str, title: str, album: str = None, media_format: 
     amazon_link = get_amazon_link(artist, album, normalized_title)
 
     try:
-        search_response = requests.get(search_url, params=search_params, headers=headers, timeout=10)
+        search_response = discogs_rate_limited_get(search_url, params=search_params, headers=headers, timeout=10)
     except requests.exceptions.RequestException as e:
         app.logger.warning("Discogs search network error for '%s': %s", title, e)
         return {"found": False, "link": amazon_link}
@@ -122,10 +137,10 @@ def get_discogs_price(artist: str, title: str, album: str = None, media_format: 
             continue
             
         release_id = result['id']
-        time.sleep(1) 
+        # time.sleep(1) 
         
         try:
-            price_response = requests.get(
+            price_response = discogs_rate_limited_get(
                 f"https://api.discogs.com/releases/{release_id}",
                 headers=headers,
                 timeout=10,
@@ -239,7 +254,7 @@ def get_playlist_tracks(playlist_id: str):
         artist = track_data["artists"][0] if track_data["artists"] else ""
         return track_data, get_discogs_price(artist, track_data["name"], track_data.get("album"), requested_format)
 
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=6) as executor:
         futures = {executor.submit(fetch_price, t): t for t in all_tracks}
         priced = {}
         for future in as_completed(futures):
