@@ -24,8 +24,14 @@ function Callback() {
     }
 
     exchangeCodeForToken(code)
-      .then(() => { window.location.href = '/' })
-      .catch(() => setError('Something went wrong. Please try again.'))
+      .then(() => { 
+        window.location.replace('/')  // stop refresh from throwing unauth code
+       // window.history.replaceState({}, document.title, '/callback')
+       })
+
+      .catch((err) => {
+        console.error('Token exchange failed:', err)
+        setError('Something went wrong. Please try again.')})
   }, [])
 
   return (

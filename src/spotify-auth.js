@@ -26,7 +26,7 @@ export async function redirectToSpotify() {
   const codeVerifier = generateRandomString(64)
   const codeChallenge = base64encode(await sha256(codeVerifier))
 
-  localStorage.setItem('spotify_code_verifier', codeVerifier)
+  sessionStorage.setItem('spotify_code_verifier', codeVerifier)
 
   const params = new URLSearchParams({
     response_type: 'code',
@@ -41,7 +41,10 @@ export async function redirectToSpotify() {
 }
 
 export async function exchangeCodeForToken(code) {
-  const codeVerifier = localStorage.getItem('spotify_code_verifier')
+  const codeVerifier = sessionStorage.getItem('spotify_code_verifier')
+
+  // testing change to sessionstorage from local storage
+  console.log("verifier:", sessionStorage.getItem("spotify_code_verifier"))
 
   const response = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
@@ -55,13 +58,18 @@ export async function exchangeCodeForToken(code) {
     }),
   })
 
+  // temporarily adding log to see why callback is getting triggered 
+  // page not reloading
+  // console.log("Status:", response.status)
+  // console.log("Response:", text)
+
   if (!response.ok) throw new Error('Token exchange failed')
 
   const data = await response.json()
   localStorage.setItem('spotify_access_token', data.access_token)
   localStorage.setItem('spotify_refresh_token', data.refresh_token)
   localStorage.setItem('spotify_token_expiry', Date.now() + data.expires_in * 1000)
-  localStorage.removeItem('spotify_code_verifier')
+  sessionStorage.removeItem('spotify_code_verifier')
   return data
 }
 
