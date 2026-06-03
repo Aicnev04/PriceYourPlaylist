@@ -23,6 +23,8 @@ function Callback() {
       return
     }
 
+    const controller = new AbortController()
+
     exchangeCodeForToken(code, controller.signal)
       .then(() => { window.location.replace('/') })
       .catch((err) => {
