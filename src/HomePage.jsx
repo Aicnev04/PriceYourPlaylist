@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef} from 'react'
 import { getAccessToken, logout } from './spotify-auth'
 import './HomePage.css'
 // Added AlbumSearch so users can look up any album price without needing a playlist
@@ -194,7 +194,7 @@ function PlaylistCard({ pl, onClick, index }) {
 
 // Shows all tracks in a playlist with their Discogs prices
 // Re-fetches whenever the user switches the format filter (Vinyl, CD, etc.)
-function PlaylistDetail({ playlist, onBack }) {
+function PlaylistDetail({ playlist, onBack, trackCache }) {
   const [tracks,      setTracks]      = useState(null)
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState(null)
@@ -204,6 +204,20 @@ function PlaylistDetail({ playlist, onBack }) {
 
   useEffect(() => {
     if (!playlist) return
+
+    const cacheKey = `${playlist.id}-${mediaFormat}`
+
+    if (trackCache.current[cacheKey]) {
+      console.log('cache hit for', cacheKey)
+      const cached = trackCache.current[cacheKey]
+      setTracks(cached.tracks)
+      setPricedCount(cached.pricedCount)
+      setTotalPrice(cached.totalPrice)
+      setLoading(false)
+      return
+    }
+
+
     setLoading(true)
     setTracks(null)
     setError(null)
@@ -214,10 +228,14 @@ function PlaylistDetail({ playlist, onBack }) {
     const formatQuery = mediaFormat ? `?format=${mediaFormat}` : ""
     spotifyFetch(`/api/spotify/playlists/${playlist.id}/tracks${formatQuery}`)
       .then(data => {
-        setTracks(data.tracks)
         const priced = data.tracks.filter(t => t.price?.price != null)
-        setPricedCount(priced.length)
-        setTotalPrice(priced.reduce((sum, t) => sum + parseFloat(t.price.price), 0))
+        const pricedCount = priced.length
+        const totalPrice = priced.reduce((sum, t) => sum + parseFloat(t.price.price), 0)
+
+        trackCache.current[cacheKey] = { tracks: data.tracks, pricedCount, totalPrice }
+        setTracks(data.tracks)
+        setPricedCount(pricedCount)
+        setTotalPrice(totalPrice)
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
@@ -332,6 +350,7 @@ function LoadingPulse({ label = 'Loading…' }) {
 
 // Main page component — shows the user's profile, playlist grid, and album search
 function HomePage() {
+  const trackCache = useRef({}) // locally cache recent discogs searches
   const [profile,          setProfile]          = useState(null)
   const [playlists,        setPlaylists]        = useState([])
   const [selectedPlaylist, setSelectedPlaylist] = useState(null)
@@ -479,6 +498,7 @@ function HomePage() {
         <PlaylistDetail
           playlist={selectedPlaylist}
           onBack={() => setSelectedPlaylist(null)}
+          trackCache = {trackCache}
         />
       )}
 
