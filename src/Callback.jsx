@@ -23,15 +23,15 @@ function Callback() {
       return
     }
 
-    exchangeCodeForToken(code)
-      .then(() => { 
-        window.location.replace('/')  // stop refresh from throwing unauth code
-       // window.history.replaceState({}, document.title, '/callback')
-       })
-
+    exchangeCodeForToken(code, controller.signal)
+      .then(() => { window.location.replace('/') })
       .catch((err) => {
+        if (err.name === 'AbortError') return
         console.error('Token exchange failed:', err)
-        setError('Something went wrong. Please try again.')})
+        setError('Something went wrong. Please try again.')
+      })
+
+    return () => controller.abort()
   }, [])
 
   return (

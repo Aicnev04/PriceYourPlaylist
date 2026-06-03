@@ -40,16 +40,15 @@ export async function redirectToSpotify() {
   window.location.href = `https://accounts.spotify.com/authorize?${params}`
 }
 
-export async function exchangeCodeForToken(code) {
+export async function exchangeCodeForToken(code, signal) {
   const codeVerifier = sessionStorage.getItem('spotify_code_verifier')
 
-  // testing change to sessionstorage from local storage
-  console.log("verifier:", sessionStorage.getItem("spotify_code_verifier"))
 
   const response = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
+      signal, // adding signal for more detail
       grant_type: 'authorization_code',
       code,
       redirect_uri: REDIRECT_URI,
@@ -57,11 +56,6 @@ export async function exchangeCodeForToken(code) {
       code_verifier: codeVerifier,
     }),
   })
-
-  // temporarily adding log to see why callback is getting triggered 
-  // page not reloading
-  // console.log("Status:", response.status)
-  // console.log("Response:", text)
 
   if (!response.ok) throw new Error('Token exchange failed')
 

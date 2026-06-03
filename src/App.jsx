@@ -6,11 +6,10 @@ import { isTokenValid } from './spotify-auth'
 function App() {
   const path = window.location.pathname
 
-  // if (path === '/callback') return <Callback />
-  // if (!isTokenValid()) return <LoginPage />
-
-  // return <HomePage />
-
+  if (path === '/callback' && isTokenValid()) {
+    window.location.replace('/')
+    return null
+  }
 
   const params = new URLSearchParams(window.location.search)
   const code = params.get('code')
