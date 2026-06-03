@@ -3,22 +3,19 @@ import re
 import requests
 import time
 import logging
+from collections import Counter
 from functools import wraps, lru_cache
-from concurrent.futures import ThreadPoolExecutor, as_completed # FIXED: Added missing import
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
 
-# Initialize Flask app
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)s  %(message)s")
 
-# Configure CORS with frontend URL from environment or default to localhost
 CORS(app, origins=[os.environ.get("FRONTEND_URL", "http://localhost:5173")])
 
-# Spotify API base URL
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 
-# Discogs API configuration
 DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
 if not DISCOGS_TOKEN:
     app.logger.warning("DISCOGS_TOKEN not set — Discogs pricing will be skipped")
@@ -28,14 +25,12 @@ headers = {
 }
 
 def get_spotify_token() -> str | None:
-    """Extract the Spotify OAuth access token from the incoming request."""
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         return auth_header[len("Bearer "):]
     return None
 
 def spotify_get(path: str, params: dict = None) -> dict:
-    """Perform a GET against the Spotify Web API and return parsed JSON."""
     token = get_spotify_token()
     if not token:
         abort(401, description="Missing Spotify access token.")
@@ -61,7 +56,6 @@ def spotify_get(path: str, params: dict = None) -> dict:
     return response.json()
 
 def require_token(f):
-    """Decorator ensuring the incoming request contains a Spotify token."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not get_spotify_token():
@@ -78,10 +72,8 @@ def get_amazon_link(artist: str, album: str, track: str) -> str | None:
     query = " ".join(p for p in [track, artist, album] if p)
     return f"https://www.amazon.com/s?k={requests.utils.quote(query)}&i=digital-music"
 
-# FIXED: Removed the redundant get_discogs_price function. Using the cached one only.
 @lru_cache(maxsize=500)
 def get_discogs_price(artist: str, title: str, album: str = None, media_format: str = None) -> dict | None:
-    """Query the Discogs database for likely release matches and return a price."""
     search_url = "https://api.discogs.com/database/search"
     normalized_title = normalize_title_for_search(title)
     query_parts = [p for p in (artist, normalized_title, album) if p]
@@ -152,7 +144,86 @@ def get_discogs_price(artist: str, title: str, album: str = None, media_format: 
     }
 
 
-# ── Spotify routes ────────────────────────────────────────────────────────────
+@lru_cache(maxsize=200)
+def get_discogs_album_price(artist: str, album: str, media_format: str = None) -> dict | None:
+    amazon_link = get_amazon_link(artist, album, "")
+
+    try:
+        search_response = requests.get(
+            "https://api.discogs.com/database/search",
+            params={"q": f"{artist} {album}", "type": "master"},
+            headers=headers,
+            timeout=10,
+        )
+    except requests.exceptions.RequestException as e:
+        app.logger.warning("Discogs master search network error for '%s - %s': %s", artist, album, e)
+        return {"found": False, "link": amazon_link}
+
+    if search_response.status_code == 401:
+        app.logger.error("Discogs token invalid (401)")
+        return {"found": False, "link": amazon_link}
+    if search_response.status_code == 429:
+        app.logger.warning("Discogs rate limit hit searching master '%s'", album)
+        return {"found": False, "link": amazon_link}
+    if not search_response.ok:
+        return {"found": False, "link": amazon_link}
+
+    masters = search_response.json().get("results", [])
+    if not masters:
+        return {"found": False, "link": amazon_link}
+
+    master = masters[0]
+    master_id = master["id"]
+    master_link = f"https://www.discogs.com/master/{master_id}"
+
+    time.sleep(1)
+    versions_params = {"per_page": 10, "page": 1, "sort": "price", "sort_order": "asc"}
+    if media_format:
+        versions_params["format"] = media_format
+
+    try:
+        versions_response = requests.get(
+            f"https://api.discogs.com/masters/{master_id}/versions",
+            headers=headers,
+            params=versions_params,
+            timeout=10,
+        )
+        versions_response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        app.logger.warning("Discogs versions fetch error for master %s: %s", master_id, e)
+        return {"found": True, "price": None, "link": master_link}
+
+    versions = versions_response.json().get("versions", [])
+    if not versions:
+        return {"found": True, "price": None, "link": master_link}
+
+    for version in versions[:5]:
+        release_id = version.get("id")
+        if not release_id:
+            continue
+        time.sleep(1)
+        try:
+            price_response = requests.get(
+                f"https://api.discogs.com/releases/{release_id}",
+                headers=headers,
+                timeout=10,
+            )
+            price_response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            app.logger.warning("Discogs release fetch error for version %s: %s", release_id, e)
+            continue
+
+        lowest_price = price_response.json().get("lowest_price")
+        if lowest_price:
+            return {
+                "found": True,
+                "price": lowest_price,
+                "link": f"https://www.discogs.com/sell/release/{release_id}",
+                "master_link": master_link,
+            }
+
+    return {"found": True, "price": None, "link": master_link}
+
 
 @app.route("/api/spotify/me")
 @require_token
@@ -218,7 +289,6 @@ def get_playlist_tracks(playlist_id: str):
             track = item.get("item")
             if not track: continue
             
-            # FIXED: Define album variables before using them
             album = track.get("album", {})
             album_images = album.get("images", [])
             album_image = album_images[0].get("url") if album_images else None
@@ -235,56 +305,55 @@ def get_playlist_tracks(playlist_id: str):
         offset += limit
         if not data.get("next"): break
 
+    album_track_counts = Counter(
+        t["album"] for t in all_tracks if t.get("album")
+    )
+    multi_track_albums = {album for album, count in album_track_counts.items() if count >= 2}
+
     def fetch_price(track_data):
         artist = track_data["artists"][0] if track_data["artists"] else ""
         return track_data, get_discogs_price(artist, track_data["name"], track_data.get("album"), requested_format)
 
+    def fetch_album_price(album: str, artist: str):
+        return album, get_discogs_album_price(artist, album, requested_format)
+
+    solo_tracks = [t for t in all_tracks if t.get("album") not in multi_track_albums]
+
+    album_artist_map = {}
+    for t in all_tracks:
+        album = t.get("album")
+        if album and album in multi_track_albums and album not in album_artist_map:
+            album_artist_map[album] = t["artists"][0] if t["artists"] else ""
+
     with ThreadPoolExecutor(max_workers=20) as executor:
-        futures = {executor.submit(fetch_price, t): t for t in all_tracks}
+        track_futures = {executor.submit(fetch_price, t): t for t in solo_tracks}
+        album_futures = {
+            executor.submit(fetch_album_price, album, artist): album
+            for album, artist in album_artist_map.items()
+        }
+
         priced = {}
-        for future in as_completed(futures):
+        for future in as_completed(track_futures):
             track_data, price = future.result()
             track_data["price"] = price
             priced[track_data["id"]] = track_data
 
+        album_prices = {}
+        for future in as_completed(album_futures):
+            album_name, album_price = future.result()
+            album_prices[album_name] = album_price
+
+    for t in all_tracks:
+        if t["id"] not in priced:
+            t["price"] = None
+            priced[t["id"]] = t
+
+    for track_data in priced.values():
+        album = track_data.get("album")
+        track_data["album_price"] = album_prices.get(album) if album in multi_track_albums else None
+
     all_tracks = [priced[t["id"]] for t in all_tracks if t["id"] in priced]
     return jsonify({"playlist_id": playlist_id, "tracks": all_tracks})
 
-
-# ── Discogs routes ────────────────────────────────────────────────────────────
-
-@app.route("/api/discogs/search")
-def discogs_search():
-    """Search Discogs for an album by artist and title, optionally filtered by format.
-    
-    Query params:
-      artist  — artist name (required)
-      album   — album title (required)
-      format  — media format: Vinyl, CD, Cassette (optional)
-    
-    Returns the lowest price found on Discogs, plus a buy link.
-    Falls back to an Amazon search link if nothing is found.
-    """
-    artist = request.args.get("artist", "").strip()
-    album  = request.args.get("album",  "").strip()
-    fmt    = request.args.get("format", None)
-
-    if not artist or not album:
-        return jsonify({"error": "artist and album are required"}), 400
-
-    app.logger.debug("GET /api/discogs/search  artist=%s album=%s format=%s", artist, album, fmt)
-
-    # Reuse the existing cached Discogs price function
-    result = get_discogs_price(artist, album, album, fmt)
-
-    if result is None:
-        return jsonify({"found": False})
-
-    return jsonify(result)
-
-
-# ── Entry point ───────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
     app.run(debug=os.environ.get("FLASK_DEBUG", "true").lower() == "true")
-    

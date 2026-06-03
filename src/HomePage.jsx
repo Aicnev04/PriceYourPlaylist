@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react'
 import { getAccessToken, logout } from './spotify-auth'
 import './HomePage.css'
-// Added AlbumSearch so users can look up any album price without needing a playlist
-import AlbumSearch from './AlbumSearch'
 
 const API = import.meta.env.VITE_API_URL || ''
 
-// Helper to make authenticated requests to our Flask backend using the Spotify token
 async function spotifyFetch(path) {
   const token = getAccessToken()
   const res = await fetch(`${API}${path}`, {
@@ -19,7 +16,6 @@ async function spotifyFetch(path) {
   return res.json()
 }
 
-// Placeholder card shown while playlists are loading
 function SkeletonCard() {
   return (
     <div className="home-playlist-card home-playlist-card--skeleton">
@@ -30,7 +26,6 @@ function SkeletonCard() {
   )
 }
 
-// Placeholder row shown while tracks are loading
 function SkeletonTrackRow() {
   return (
     <div className="home-track-row">
@@ -49,14 +44,12 @@ function SkeletonTrackRow() {
   )
 }
 
-// Converts milliseconds to m:ss format (e.g. 213000 -> 3:33)
 function formatDuration(ms) {
   if (!ms) return '0:00'
   const s = Math.floor(ms / 1000)
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-// Buy/Link button that opens the Discogs listing in a new tab
 function BuyButton({ price, label }) {
   if (!price?.link) return null
   return (
@@ -71,9 +64,9 @@ function BuyButton({ price, label }) {
   )
 }
 
-// Single track row showing track name, artist, duration, price, and buy link
 function TrackRow({ track, index }) {
   const price = track.price
+
   return (
     <div className="home-track-row" style={{ animationDelay: `${Math.min(index * 30, 600)}ms` }}>
       <div className="home-track-row__inner">
@@ -98,19 +91,20 @@ function TrackRow({ track, index }) {
   )
 }
 
-// Groups tracks from the same album together so users can choose to buy
-// tracks individually or the whole album at once
 function AlbumGroup({ albumName, tracks, startIndex }) {
-  const [buyMode, setBuyMode] = useState('individual')
+  const [collapsed, setCollapsed] = useState(false)
   const albumPrice = tracks[0]?.album_price
   const hasAlbumPrice = albumPrice?.price != null
   const hasAlbumLink  = Boolean(albumPrice?.link)
-  const totalIndividual = tracks.reduce((sum, t) => sum + (t.price?.price ?? 0), 0)
 
   return (
     <div className="home-album-group">
       <div className="home-album-group__header">
-        <div />
+        <button
+          className={`home-album-collapse${collapsed ? ' home-album-collapse--collapsed' : ''}`}
+          onClick={() => setCollapsed(c => !c)}
+          aria-label={collapsed ? 'Expand' : 'Collapse'}
+        >▾</button>
         {tracks[0]?.album_image
           ? <img className="home-track-row__thumb" src={tracks[0].album_image} alt={albumName} />
           : <div className="home-track-row__thumb home-track-row__thumb--placeholder" />
@@ -120,60 +114,42 @@ function AlbumGroup({ albumName, tracks, startIndex }) {
           <div className="home-album-group__artist">{(tracks[0]?.artists || []).join(', ')}</div>
         </div>
         <div className="home-album-group__actions">
-          {/* Toggle between buying tracks individually or the whole album */}
-          <div className="home-album-toggle">
-            <button
-              className={`home-album-toggle__btn${buyMode === 'individual' ? ' home-album-toggle__btn--active' : ''}`}
-              onClick={() => setBuyMode('individual')}
-            >
-              Individual{totalIndividual > 0 && ` $${totalIndividual.toFixed(2)}`}
-            </button>
-            <button
-              className={`home-album-toggle__btn${buyMode === 'album' ? ' home-album-toggle__btn--active' : ''}`}
-              onClick={() => setBuyMode('album')}
-              disabled={!hasAlbumLink}
-            >
-              Album{hasAlbumPrice && ` $${Number(albumPrice.price).toFixed(2)}`}
-            </button>
-          </div>
-          {buyMode === 'album' && hasAlbumLink && (
-            <BuyButton price={albumPrice} label={hasAlbumPrice ? 'Buy Album' : 'View Album'} />
+          {hasAlbumPrice && (
+            <span className="home-album-group__price">${Number(albumPrice.price).toFixed(2)}</span>
+          )}
+          {hasAlbumLink && (
+            <BuyButton price={albumPrice} label={hasAlbumPrice ? 'Buy' : 'Link'} />
           )}
         </div>
       </div>
 
-      {/* Collapse the track list when album mode is selected */}
-      <div className={`home-album-tracks${buyMode === 'album' ? ' home-album-tracks--collapsed' : ''}`}>
+      <div className={`home-album-tracks${collapsed ? ' home-album-tracks--collapsed' : ''}`}>
         <div className="home-album-tracks__inner">
-          {tracks.map((track, i) => (
-            <div key={track.id ?? i} className="home-track-row home-track-row--grouped">
-              <div className="home-track-row__inner">
-                <div className="home-track-row__index">{startIndex + i + 1}</div>
-                {track.album_image
-                  ? <img className="home-track-row__thumb" src={track.album_image} alt="" />
-                  : <div className="home-track-row__thumb home-track-row__thumb--placeholder" />
-                }
-                <div style={{ minWidth: 0 }}>
-                  <div className="home-track-row__name">{track.name}</div>
-                  <div className="home-track-row__artist">{(track.artists || []).join(', ')}</div>
-                </div>
-                <div className="home-track-row__duration">{formatDuration(track.duration_ms)}</div>
-                <div className="home-track-row__price-amount">
-                  {track.price?.price != null ? `$${Number(track.price.price).toFixed(2)}` : ''}
-                </div>
-                <div className="home-track-row__buy">
-                  <BuyButton price={track.price} />
-                </div>
+        {tracks.map((track, i) => (
+          <div
+            key={track.id ?? i}
+            className="home-track-row home-track-row--grouped"
+          >
+            <div className="home-track-row__inner">
+              <div className="home-track-row__index">{startIndex + i + 1}</div>
+              {track.album_image
+                ? <img className="home-track-row__thumb" src={track.album_image} alt="" />
+                : <div className="home-track-row__thumb home-track-row__thumb--placeholder" />
+              }
+              <div style={{ minWidth: 0 }}>
+                <div className="home-track-row__name">{track.name}</div>
+                <div className="home-track-row__artist">{(track.artists || []).join(', ')}</div>
               </div>
+              <div className="home-track-row__duration">{formatDuration(track.duration_ms)}</div>
             </div>
-          ))}
+          </div>
+        ))}
         </div>
       </div>
     </div>
   )
 }
 
-// Clickable playlist card shown in the grid on the main page
 function PlaylistCard({ pl, onClick, index }) {
   return (
     <div
@@ -192,14 +168,13 @@ function PlaylistCard({ pl, onClick, index }) {
   )
 }
 
-// Shows all tracks in a playlist with their Discogs prices
-// Re-fetches whenever the user switches the format filter (Vinyl, CD, etc.)
 function PlaylistDetail({ playlist, onBack }) {
   const [tracks,      setTracks]      = useState(null)
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState(null)
   const [totalPrice,  setTotalPrice]  = useState(0)
   const [pricedCount, setPricedCount] = useState(0)
+  
   const [mediaFormat, setMediaFormat] = useState("")
 
   useEffect(() => {
@@ -210,14 +185,32 @@ function PlaylistDetail({ playlist, onBack }) {
     setTotalPrice(0)
     setPricedCount(0)
 
-    // Add format to query string if one is selected
     const formatQuery = mediaFormat ? `?format=${mediaFormat}` : ""
+
     spotifyFetch(`/api/spotify/playlists/${playlist.id}/tracks${formatQuery}`)
       .then(data => {
         setTracks(data.tracks)
-        const priced = data.tracks.filter(t => t.price?.price != null)
-        setPricedCount(priced.length)
-        setTotalPrice(priced.reduce((sum, t) => sum + parseFloat(t.price.price), 0))
+
+        // Album tracks: count & price once per album
+        const seenAlbums = new Set()
+        let total = 0
+        let count = 0
+        for (const t of data.tracks) {
+          if (t.album_price != null) {
+            if (!seenAlbums.has(t.album)) {
+              seenAlbums.add(t.album)
+              if (t.album_price.price != null) {
+                total += parseFloat(t.album_price.price)
+                count++
+              }
+            }
+          } else if (t.price?.price != null) {
+            total += parseFloat(t.price.price)
+            count++
+          }
+        }
+        setPricedCount(count)
+        setTotalPrice(total)
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
@@ -226,6 +219,7 @@ function PlaylistDetail({ playlist, onBack }) {
   return (
     <div className="home-detail">
       <button className="home-back-btn" onClick={onBack}>← Back to playlists</button>
+
       <div className="home-detail-header">
         {playlist.image_url
           ? <img className="home-detail-cover" src={playlist.image_url} alt={playlist.name} />
@@ -233,8 +227,7 @@ function PlaylistDetail({ playlist, onBack }) {
         }
         <div className="home-detail-info">
           <div className="home-detail-title">{playlist.name}</div>
-
-          {/* Format filter buttons — changing this re-fetches prices for that format */}
+          
           <div className="home-filter-container">
             <span className="home-meta-label">Format</span>
             <div className="home-format-toggle">
@@ -253,8 +246,6 @@ function PlaylistDetail({ playlist, onBack }) {
           <div className="home-detail-meta">
             by {playlist.owner} · {playlist.track_count} tracks
           </div>
-
-          {/* Summary stats shown after tracks finish loading */}
           {!loading && tracks && (
             <div className="home-stats-row">
               <div className="home-stat">
@@ -280,13 +271,11 @@ function PlaylistDetail({ playlist, onBack }) {
       {loading && Array.from({ length: 8 }).map((_, i) => <SkeletonTrackRow key={i} />)}
 
       {tracks && (() => {
-        // Count how many tracks belong to each album
         const albumCounts = tracks.reduce((acc, t) => {
           if (t.album) acc[t.album] = (acc[t.album] || 0) + 1
           return acc
         }, {})
 
-        // Build the track list, grouping albums that have 2+ tracks together
         const rows = []
         const renderedAlbums = new Set()
         let i = 0
@@ -298,7 +287,12 @@ function PlaylistDetail({ playlist, onBack }) {
               renderedAlbums.add(album)
               const group = tracks.filter(t => t.album === album)
               rows.push(
-                <AlbumGroup key={`album-${album}`} albumName={album} tracks={group} startIndex={i} />
+                <AlbumGroup
+                  key={`album-${album}`}
+                  albumName={album}
+                  tracks={group}
+                  startIndex={i}
+                />
               )
               i += group.length
             } else {
@@ -320,7 +314,6 @@ function PlaylistDetail({ playlist, onBack }) {
   )
 }
 
-// Simple loading spinner with a label
 function LoadingPulse({ label = 'Loading…' }) {
   return (
     <div className="home-loading">
@@ -330,7 +323,6 @@ function LoadingPulse({ label = 'Loading…' }) {
   )
 }
 
-// Main page component — shows the user's profile, playlist grid, and album search
 function HomePage() {
   const [profile,          setProfile]          = useState(null)
   const [playlists,        setPlaylists]        = useState([])
@@ -341,7 +333,6 @@ function HomePage() {
   const [query,            setQuery]            = useState('')
   const [showSaved,        setShowSaved]        = useState(false)
 
-  // Fetch the logged-in user's Spotify profile
   useEffect(() => {
     spotifyFetch('/api/spotify/me')
       .then(setProfile)
@@ -349,7 +340,6 @@ function HomePage() {
       .finally(() => setProfileLoading(false))
   }, [])
 
-  // Fetch all playlists in pages of 50
   useEffect(() => {
     const PAGE = 50
     let cancelled = false
@@ -376,8 +366,7 @@ function HomePage() {
     window.location.href = '/'
   }
 
-  // Split playlists into ones the user owns vs ones they saved from others
-  const lq             = query.toLowerCase()
+  const lq            = query.toLowerCase()
   const myPlaylists    = playlists.filter(pl => !profile || pl.owner_id === profile.id)
   const savedPlaylists = profile ? playlists.filter(pl => pl.owner_id !== profile.id) : []
   const filteredMine   = myPlaylists.filter(pl => pl.name.toLowerCase().includes(lq))
@@ -481,9 +470,6 @@ function HomePage() {
           onBack={() => setSelectedPlaylist(null)}
         />
       )}
-
-      {/* Album search bar added by Abner - lets users search any album on Discogs directly */}
-      <AlbumSearch />
     </div>
   )
 }
