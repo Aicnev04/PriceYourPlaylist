@@ -195,6 +195,7 @@ function PlaylistCard({ pl, onClick, index }) {
 // Shows all tracks in a playlist with their Discogs prices
 // Re-fetches whenever the user switches the format filter (Vinyl, CD, etc.)
 function PlaylistDetail({ playlist, onBack, trackCache }) {
+  const [progress,    setProgress]    = useState(0)
   const [tracks,      setTracks]      = useState(null)
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState(null)
@@ -224,10 +225,27 @@ function PlaylistDetail({ playlist, onBack, trackCache }) {
     setTotalPrice(0)
     setPricedCount(0)
 
+    setProgress(0)
+
+    const trackCount = playlist.track_count || 20
+    const intervalMs = Math.max(200, Math.min(600, trackCount * 10))
+
+    const progressInterval = setInterval(() => {
+      setProgress(p => {
+        if (p >= 85) { clearInterval(progressInterval); return 85 }
+        // slows down exponentially as it approaches 85
+        const remaining = 85 - p
+        const increment = remaining * 0.08
+        return p + increment
+      })
+    }, intervalMs)
+
     // Add format to query string if one is selected
     const formatQuery = mediaFormat ? `?format=${mediaFormat}` : ""
     spotifyFetch(`/api/spotify/playlists/${playlist.id}/tracks${formatQuery}`)
       .then(data => {
+        clearInterval(progressInterval)
+        setProgress(100)
         const priced = data.tracks.filter(t => t.price?.price != null)
         const pricedCount = priced.length
         const totalPrice = priced.reduce((sum, t) => sum + parseFloat(t.price.price), 0)
@@ -295,7 +313,25 @@ function PlaylistDetail({ playlist, onBack, trackCache }) {
       </div>
 
       {error && <div className="home-error">{error}</div>}
-      {loading && Array.from({ length: 8 }).map((_, i) => <SkeletonTrackRow key={i} />)}
+
+      {loading && (
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px', opacity: 0.6 }}>
+            <span>Fetching prices…</span>
+            <span>{Math.round(progress)}%</span>
+          </div>
+          <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%',
+              width: `${progress}%`,
+              background: 'var(--color-primary, #1db954)',
+              borderRadius: '2px',
+              transition: 'width 0.4s ease',
+            }} />
+          </div>
+          {Array.from({ length: 8 }).map((_, i) => <SkeletonTrackRow key={i} />)}
+        </div>
+      )}
 
       {tracks && (() => {
         // Count how many tracks belong to each album
