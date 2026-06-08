@@ -5,6 +5,7 @@ import AlbumSearch from './AlbumSearch'
 
 const API = import.meta.env.VITE_API_URL || ''
 
+// hits our Flask API with the user's Spotify token attached, throwing on non-2xx
 async function spotifyFetch(path) {
   const token = getAccessToken()
   const res = await fetch(`${API}${path}`, {
@@ -45,6 +46,7 @@ function SkeletonTrackRow() {
   )
 }
 
+// converts a track's duration in ms to a "m:ss" display string
 function formatDuration(ms) {
   if (!ms) return '0:00'
   const s = Math.floor(ms / 1000)
@@ -92,6 +94,7 @@ function TrackRow({ track, index }) {
   )
 }
 
+// collapsible block of tracks that share an album, with a single buy-the-whole-album option
 function AlbumGroup({ albumName, tracks, startIndex }) {
   const [collapsed, setCollapsed] = useState(false)
   const albumPrice = tracks[0]?.album_price
@@ -171,6 +174,8 @@ function PlaylistCard({ pl, onClick, index }) {
 
 // Shows all tracks in a playlist with their Discogs prices
 // Re-fetches whenever the user switches the format filter (Vinyl, CD, etc.)
+// fetches a playlist's priced tracks, tallies up a running total, and renders
+// the list — grouping same-album tracks together instead of listing them solo
 function PlaylistDetail({ playlist, onBack, trackCache }) {
   const [progress,    setProgress]    = useState(0)
   const [tracks,      setTracks]      = useState(null)
@@ -370,6 +375,8 @@ function LoadingPulse({ label = 'Loading…' }) {
   )
 }
 
+// main app screen: loads the user's profile and playlists, then lets them
+// search/filter and drill into a playlist for pricing
 function HomePage() {
   const trackCache = useRef({}) // locally cache recent discogs searches
   const [profile,          setProfile]          = useState(null)

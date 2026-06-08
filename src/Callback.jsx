@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { exchangeCodeForToken } from './spotify-auth'
 import './Callback.css'
 
+// landing page for the Spotify OAuth redirect — grabs the auth code from the
+// URL, swaps it for tokens, and bounces back home (or shows an error)
 function Callback() {
   const [error, setError] = useState(null)
   const exchanged = useRef(false)

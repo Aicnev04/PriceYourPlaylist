@@ -4,17 +4,20 @@ const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI || 'https://localhost:517
 // Include playlist scopes now so we don't need to re-auth later
 const SCOPES = 'user-read-private user-read-email playlist-read-private playlist-read-collaborative'
 
+// random string of allowed chars — used as the PKCE code verifier
 function generateRandomString(length) {
   const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
   const values = crypto.getRandomValues(new Uint8Array(length))
   return values.reduce((acc, x) => acc + possible[x % possible.length], '')
 }
 
+// SHA-256 hash of the verifier, fed into the PKCE code challenge
 async function sha256(plain) {
   const data = new TextEncoder().encode(plain)
   return window.crypto.subtle.digest('SHA-256', data)
 }
 
+// base64url-encodes the hash (no padding, URL-safe chars) as PKCE expects
 function base64encode(input) {
   return btoa(String.fromCharCode(...new Uint8Array(input)))
     .replace(/=/g, '')
@@ -22,6 +25,8 @@ function base64encode(input) {
     .replace(/\//g, '_')
 }
 
+// kicks off the PKCE login flow: generates the verifier/challenge pair, saves the
+// verifier for later, and sends the user off to Spotify's authorize page
 export async function redirectToSpotify() {
   const codeVerifier = generateRandomString(64)
   const codeChallenge = base64encode(await sha256(codeVerifier))
@@ -40,6 +45,8 @@ export async function redirectToSpotify() {
   window.location.href = `https://accounts.spotify.com/authorize?${params}`
 }
 
+// trades the auth code (plus the stashed verifier) for real tokens and stores
+// them in localStorage along with their expiry
 export async function exchangeCodeForToken(code, signal) {
   const codeVerifier = sessionStorage.getItem('spotify_code_verifier')
 
@@ -71,6 +78,7 @@ export function getAccessToken() {
   return localStorage.getItem('spotify_access_token')
 }
 
+// true when we have a stored token and it hasn't passed its expiry yet
 export function isTokenValid() {
   const token = localStorage.getItem('spotify_access_token')
   const expiry = localStorage.getItem('spotify_token_expiry')
@@ -78,6 +86,7 @@ export function isTokenValid() {
   return Date.now() < parseInt(expiry)
 }
 
+// wipes the stored Spotify tokens, effectively logging the user out
 export function logout() {
   localStorage.removeItem('spotify_access_token')
   localStorage.removeItem('spotify_refresh_token')
