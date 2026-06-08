@@ -24,12 +24,14 @@ headers = {
     "User-Agent": "PriceYourPlaylist/1.0"
 }
 
+# pulls the bearer token out of the Authorization header so we can forward it to Spotify
 def get_spotify_token() -> str | None:
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         return auth_header[len("Bearer "):]
     return None
 
+# thin wrapper around Spotify GET requests; turns common error codes into proper HTTP aborts
 def spotify_get(path: str, params: dict = None) -> dict:
     token = get_spotify_token()
     if not token:
@@ -55,6 +57,7 @@ def spotify_get(path: str, params: dict = None) -> dict:
 
     return response.json()
 
+# route decorator that rejects requests with no Spotify token before any work happens
 def require_token(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -63,15 +66,19 @@ def require_token(f):
         return f(*args, **kwargs)
     return decorated
 
+# strips "(feat. ...)" tags from track titles so Discogs search isn't thrown off by them
 def normalize_title_for_search(title: str) -> str:
     if not title:
         return title
     return re.sub(r"\s*\((?:feat|featuring|ft|feat|with\.)\s+[^)]*\)", "", title, flags=re.IGNORECASE).strip()
 
+# builds an Amazon digital-music search URL, used as a fallback when Discogs has nothing
 def get_amazon_link(artist: str, album: str, track: str) -> str | None:
     query = " ".join(p for p in [track, artist, album] if p)
     return f"https://www.amazon.com/s?k={requests.utils.quote(query)}&i=digital-music"
 
+# looks up the cheapest Discogs listing for a single track, falling back to an Amazon link if nothing's found.
+# results are cached since the same track often shows up across multiple playlists.
 @lru_cache(maxsize=500)
 def get_discogs_price(artist: str, title: str, album: str = None, media_format: str = None) -> dict | None:
     search_url = "https://api.discogs.com/database/search"
@@ -144,6 +151,8 @@ def get_discogs_price(artist: str, title: str, album: str = None, media_format: 
     }
 
 
+# same idea as get_discogs_price but for whole albums: finds the master release, then
+# checks its versions for the lowest price, falling back to Amazon when nothing turns up.
 @lru_cache(maxsize=200)
 def get_discogs_album_price(artist: str, album: str, media_format: str = None) -> dict | None:
     amazon_link = get_amazon_link(artist, album, "")
@@ -225,6 +234,7 @@ def get_discogs_album_price(artist: str, album: str, media_format: str = None) -
     return {"found": True, "price": None, "link": master_link}
 
 
+# returns the logged-in user's basic Spotify profile (name, avatar, country, etc.)
 @app.route("/api/spotify/me")
 @require_token
 def get_profile():
@@ -240,6 +250,7 @@ def get_profile():
         "product":      data.get("product"),
     })
 
+# lists the user's playlists with the bits the UI needs (cover art, owner, track count)
 @app.route("/api/spotify/playlists")
 @require_token
 def get_playlists():
@@ -262,6 +273,8 @@ def get_playlists():
         })
     return jsonify({"total": data.get("total", 0), "items": items})
 
+# core endpoint: pulls every track in a playlist, groups same-album tracks together,
+# and prices everything against Discogs in parallel (per-track and per-album).
 @app.route("/api/spotify/playlists/<playlist_id>/tracks")
 @require_token
 def get_playlist_tracks(playlist_id: str):

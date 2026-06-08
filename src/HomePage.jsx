@@ -4,6 +4,7 @@ import './HomePage.css'
 
 const API = import.meta.env.VITE_API_URL || ''
 
+// hits our Flask API with the user's Spotify token attached, throwing on non-2xx
 async function spotifyFetch(path) {
   const token = getAccessToken()
   const res = await fetch(`${API}${path}`, {
@@ -44,6 +45,7 @@ function SkeletonTrackRow() {
   )
 }
 
+// converts a track's duration in ms to a "m:ss" display string
 function formatDuration(ms) {
   if (!ms) return '0:00'
   const s = Math.floor(ms / 1000)
@@ -91,6 +93,7 @@ function TrackRow({ track, index }) {
   )
 }
 
+// collapsible block of tracks that share an album, with a single buy-the-whole-album option
 function AlbumGroup({ albumName, tracks, startIndex }) {
   const [collapsed, setCollapsed] = useState(false)
   const albumPrice = tracks[0]?.album_price
@@ -168,6 +171,8 @@ function PlaylistCard({ pl, onClick, index }) {
   )
 }
 
+// fetches a playlist's priced tracks, tallies up a running total, and renders
+// the list — grouping same-album tracks together instead of listing them solo
 function PlaylistDetail({ playlist, onBack }) {
   const [tracks,      setTracks]      = useState(null)
   const [loading,     setLoading]     = useState(true)
@@ -323,6 +328,8 @@ function LoadingPulse({ label = 'Loading…' }) {
   )
 }
 
+// main app screen: loads the user's profile and playlists, then lets them
+// search/filter and drill into a playlist for pricing
 function HomePage() {
   const [profile,          setProfile]          = useState(null)
   const [playlists,        setPlaylists]        = useState([])
